@@ -1,0 +1,65 @@
+# Layerwise Training Approach - 6 Layer Configuration
+# Incremental layer-by-layer training with parameter freezing
+#
+# ASSIGNED TO: Frahan Riaz (Week 8 - 5 runs)
+
+experiment:
+  name: "layerwise_6layer"
+  approach: "layerwise"
+  description: "Layerwise training on 6-layer quantum circuit"
+
+model:
+  n_qubits: 4
+  target_layers: 6
+  circuit_type: "hardware_efficient"
+  data_reuploading: false
+
+training:
+  optimizer: "adam"
+  learning_rate: 0.01
+  batch_size: 20
+  epochs_per_layer: 10
+  finetune_epochs: 10
+  cost_function: "global"
+  local_cost: false
+  freezing_strategy: "immediate"
+
+data:
+  dataset: "mnist"
+  digit1: 3
+  digit2: 6
+  train_size: 1000
+  test_size: 200
+  image_size: [4, 4]
+  normalization: "min_max"
+  preprocessing: "downsample_bilinear"
+
+quantum:
+  shots: 1024
+  backend: "cirq_simulator"
+  
+metrics:
+  track_gradients: true
+  gradient_variance: true
+  gradient_norm: true
+  barren_plateau_threshold: 1.0e-6
+  success_threshold: 90.0
+  track_per_layer: true
+
+random_seeds: [42, 123, 456, 789, 101112]
+
+output:
+  results_dir: "results/layerwise/depth_6"
+  save_checkpoints: true
+  save_gradients: true
+  log_frequency: 1
+
+# Training schedule:
+# Total epochs: 60 + 10 = 70 epochs
+# Epochs 1-10: Layer 1
+# Epochs 11-20: Layer 2
+# Epochs 21-30: Layer 3
+# Epochs 31-40: Layer 4
+# Epochs 41-50: Layer 5
+# Epochs 51-60: Layer 6
+# Epochs 61-70: Fine-tune all

@@ -1,0 +1,46 @@
+Run_ID,Approach,Depth,Seed,Config_File,Assigned_To,Week,Status,Test_Accuracy,Grad_Variance,Success,Training_Time,Notes
+B-4L-1,Baseline,4,42,baseline_4layer.yaml,Asma,7,Pending,,,,,
+B-4L-2,Baseline,4,123,baseline_4layer.yaml,Asma,7,Pending,,,,,
+B-4L-3,Baseline,4,456,baseline_4layer.yaml,Asma,7,Pending,,,,,
+B-4L-4,Baseline,4,789,baseline_4layer.yaml,Asma,7,Pending,,,,,
+B-4L-5,Baseline,4,101112,baseline_4layer.yaml,Asma,7,Pending,,,,,
+L-4L-1,Layerwise,4,42,layerwise_4layer.yaml,Asma,7,Pending,,,,,
+L-4L-2,Layerwise,4,123,layerwise_4layer.yaml,Asma,7,Pending,,,,,
+L-4L-3,Layerwise,4,456,layerwise_4layer.yaml,Asma,7,Pending,,,,,
+L-4L-4,Layerwise,4,789,layerwise_4layer.yaml,Asma,7,Pending,,,,,
+L-4L-5,Layerwise,4,101112,layerwise_4layer.yaml,Asma,7,Pending,,,,,
+LC-4L-1,Local Cost,4,42,local_cost_4layer.yaml,Asma,7,Pending,,,,,
+LC-4L-2,Local Cost,4,123,local_cost_4layer.yaml,Asma,7,Pending,,,,,
+LC-4L-3,Local Cost,4,456,local_cost_4layer.yaml,Asma,7,Pending,,,,,
+LC-4L-4,Local Cost,4,789,local_cost_4layer.yaml,Asma,7,Pending,,,,,
+LC-4L-5,Local Cost,4,101112,local_cost_4layer.yaml,Asma,7,Pending,,,,,
+B-6L-1,Baseline,6,42,baseline_6layer.yaml,Frahan,8,Pending,,,,,
+B-6L-2,Baseline,6,123,baseline_6layer.yaml,Frahan,8,Pending,,,,,
+B-6L-3,Baseline,6,456,baseline_6layer.yaml,Frahan,8,Pending,,,,,
+B-6L-4,Baseline,6,789,baseline_6layer.yaml,Frahan,8,Pending,,,,,
+B-6L-5,Baseline,6,101112,baseline_6layer.yaml,Frahan,8,Pending,,,,,
+L-6L-1,Layerwise,6,42,layerwise_6layer.yaml,Frahan,8,Pending,,,,,
+L-6L-2,Layerwise,6,123,layerwise_6layer.yaml,Frahan,8,Pending,,,,,
+L-6L-3,Layerwise,6,456,layerwise_6layer.yaml,Frahan,8,Pending,,,,,
+L-6L-4,Layerwise,6,789,layerwise_6layer.yaml,Frahan,8,Pending,,,,,
+L-6L-5,Layerwise,6,101112,layerwise_6layer.yaml,Frahan,8,Pending,,,,,
+LC-6L-1,Local Cost,6,42,local_cost_6layer.yaml,Frahan,8,Pending,,,,,
+LC-6L-2,Local Cost,6,123,local_cost_6layer.yaml,Frahan,8,Pending,,,,,
+LC-6L-3,Local Cost,6,456,local_cost_6layer.yaml,Frahan,8,Pending,,,,,
+LC-6L-4,Local Cost,6,789,local_cost_6layer.yaml,Frahan,8,Pending,,,,,
+LC-6L-5,Local Cost,6,101112,local_cost_6layer.yaml,Frahan,8,Pending,,,,,
+B-8L-1,Baseline,8,42,baseline_8layer.yaml,Fahad,9,Pending,,,,CRITICAL - Expected failure
+B-8L-2,Baseline,8,123,baseline_8layer.yaml,Fahad,9,Pending,,,,CRITICAL - Expected failure
+B-8L-3,Baseline,8,456,baseline_8layer.yaml,Fahad,9,Pending,,,,CRITICAL - Expected failure
+B-8L-4,Baseline,8,789,baseline_8layer.yaml,Fahad,9,Pending,,,,CRITICAL - Expected failure
+B-8L-5,Baseline,8,101112,baseline_8layer.yaml,Fahad,9,Pending,,,,CRITICAL - Expected failure
+L-8L-1,Layerwise,8,42,layerwise_8layer.yaml,Fahad,9,Pending,,,,CRITICAL - Should succeed
+L-8L-2,Layerwise,8,123,layerwise_8layer.yaml,Fahad,9,Pending,,,,CRITICAL - Should succeed
+L-8L-3,Layerwise,8,456,layerwise_8layer.yaml,Fahad,9,Pending,,,,CRITICAL - Should succeed
+L-8L-4,Layerwise,8,789,layerwise_8layer.yaml,Fahad,9,Pending,,,,CRITICAL - Should succeed
+L-8L-5,Layerwise,8,101112,layerwise_8layer.yaml,Fahad,9,Pending,,,,CRITICAL - Should succeed
+LC-8L-1,Local Cost,8,42,local_cost_8layer.yaml,Fahad,9,Pending,,,,Polynomial scaling test
+LC-8L-2,Local Cost,8,123,local_cost_8layer.yaml,Fahad,9,Pending,,,,Polynomial scaling test
+LC-8L-3,Local Cost,8,456,local_cost_8layer.yaml,Fahad,9,Pending,,,,Polynomial scaling test
+LC-8L-4,Local Cost,8,789,local_cost_8layer.yaml,Fahad,9,Pending,,,,Polynomial scaling test
+LC-8L-5,Local Cost,8,101112,local_cost_8layer.yaml,Fahad,9,Pending,,,,Polynomial scaling test
