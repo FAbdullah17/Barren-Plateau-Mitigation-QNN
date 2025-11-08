@@ -6,3 +6,4 @@ results/*
 !results/.gitkeep
 wandb/
 /venv/
+FAHAD_PROGRESS.md
