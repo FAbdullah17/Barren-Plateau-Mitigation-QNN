@@ -118,9 +118,9 @@ class BaselineTrainer:
                 leave=False
             ):
                 loss, acc, gradients = self._train_step(batch_circuits, batch_labels)
-                epoch_loss.append(loss)
-                epoch_acc.append(acc)
-                epoch_gradients.extend(gradients)
+                epoch_loss.append(loss.numpy())
+                epoch_acc.append(acc.numpy())
+                epoch_gradients.extend([g.numpy() for g in gradients])
             
             # Compute metrics
             train_loss = np.mean(epoch_loss)
@@ -174,7 +174,8 @@ class BaselineTrainer:
         
         return results
     
-    @tf.function
+    # Note: @tf.function removed for quantum circuit compatibility
+    # TFQ already uses graph compilation internally
     def _train_step(self, circuits, labels):
         """Single training step."""
         with tf.GradientTape() as tape:
@@ -189,7 +190,8 @@ class BaselineTrainer:
         labels_int = tf.cast(labels, tf.int32)
         accuracy = tf.reduce_mean(tf.cast(tf.equal(predictions_binary, labels_int), tf.float32))
         
-        return loss.numpy(), accuracy.numpy(), [g.numpy() for g in gradients]
+        # Return TensorFlow tensors (not numpy), let caller convert if needed
+        return loss, accuracy, gradients
     
     def _evaluate(self, circuits, labels):
         """Evaluate on given data."""
