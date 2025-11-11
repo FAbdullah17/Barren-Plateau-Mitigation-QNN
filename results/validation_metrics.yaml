@@ -1,0 +1,11 @@
+
+Gradient Statistics:
+  mean_norm: 0.015704
+  std_norm: 0.034182
+  variance: 0.001168
+  min_norm: 0.001995
+  max_norm: 0.287434
+  median_norm: 0.005853
+  total_updates: 100.000000
+
+Barren plateau detected: False
