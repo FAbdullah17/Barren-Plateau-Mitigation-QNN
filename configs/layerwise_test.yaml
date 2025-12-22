@@ -1,0 +1,58 @@
+# Layerwise Training Configuration - Same as Baseline for fair comparison
+# Matches baseline_L4 configuration exactly
+
+experiment:
+  name: "layerwise_test"
+  approach: "layerwise"
+  description: "Layerwise training with same config as baseline for comparison"
+
+model:
+  n_qubits: 4
+  target_layers: 4
+  circuit_type: "hardware_efficient"
+  data_reuploading: false
+
+training:
+  optimizer: "adam"
+  learning_rate: 0.01
+  batch_size: 20
+  epochs_per_layer: 10  # 10 epochs per layer x 4 layers = 40 epochs
+  finetune_epochs: 10   # + 10 finetune = 50 total epochs (same as baseline)
+  cost_function: "global"
+  local_cost: false
+  freezing_strategy: "immediate"
+
+data:
+  dataset: "mnist"
+  digit1: 3
+  digit2: 6
+  train_size: 1000  # Same as baseline
+  test_size: 200    # Same as baseline
+  image_size: [4, 4]
+  normalization: "min_max"
+  preprocessing: "downsample_bilinear"
+
+quantum:
+  shots: 1024
+  backend: "cirq_simulator"
+  
+metrics:
+  track_gradients: true
+  gradient_variance: true
+  gradient_norm: true
+  barren_plateau_threshold: 1e-6  # Same threshold as baseline
+  success_threshold: 90.0
+  track_per_layer: true
+
+random_seeds: [42]
+
+output:
+  results_dir: "results/layerwise/test"
+  save_checkpoints: true
+  save_gradients: true
+  log_frequency: 1
+
+# Training schedule (for 2 layers):
+# Epochs 1: Train layer 1 only
+# Epochs 2: Train layer 2 only (layer 1 frozen)
+# Epochs 3: Fine-tune all layers
