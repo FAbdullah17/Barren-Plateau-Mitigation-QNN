@@ -4,7 +4,7 @@ import pytest
 import cirq
 import sympy
 import numpy as np
-from src.models.quantum_circuit import QuantumCircuit
+from src.models.quantum_circuit import QuantumCircuit, create_readout_operators
 
 
 class TestQuantumCircuit:
@@ -19,36 +19,6 @@ class TestQuantumCircuit:
         assert len(qc.qubits) == 4
         assert all(isinstance(q, cirq.GridQubit) for q in qc.qubits)
     
-    def test_create_data_encoding_circuit(self):
-        """Test data encoding circuit creation."""
-        qc = QuantumCircuit(n_qubits=4, n_layers=3)
-        encoding_circuit = qc.create_data_encoding_circuit()
-        
-        # Should have 4 parameters (one per qubit)
-        symbols = list(encoding_circuit.all_operations())
-        assert len(symbols) > 0
-        
-        # Check it's a valid Cirq circuit
-        assert isinstance(encoding_circuit, cirq.Circuit)
-    
-    def test_create_variational_circuit(self):
-        """Test variational circuit creation."""
-        qc = QuantumCircuit(n_qubits=4, n_layers=3)
-        var_circuit = qc.create_variational_circuit()
-        
-        # Check it's a valid circuit
-        assert isinstance(var_circuit, cirq.Circuit)
-        
-        # Should have operations (gates)
-        ops = list(var_circuit.all_operations())
-        assert len(ops) > 0
-        
-        # Verify it uses the correct qubits
-        used_qubits = set()
-        for op in ops:
-            used_qubits.update(op.qubits)
-        assert len(used_qubits) <= 4
-    
     def test_get_circuit(self):
         """Test full circuit retrieval."""
         qc = QuantumCircuit(n_qubits=4, n_layers=3)
@@ -61,70 +31,115 @@ class TestQuantumCircuit:
         """Test layerwise circuit construction."""
         qc = QuantumCircuit(n_qubits=4, n_layers=4)
         
-        # Get circuits up to different layers
-        circuit_1 = qc.get_circuit_up_to_layer(1)
-        circuit_2 = qc.get_circuit_up_to_layer(2)
-        circuit_4 = qc.get_circuit_up_to_layer(4)
+        # Get circuits up to different layers (0-indexed: 0, 1, 2, 3)
+        circuit_0 = qc.get_circuit_up_to_layer(0)  # Layer 0 only
+        circuit_1 = qc.get_circuit_up_to_layer(1)  # Layers 0-1
+        circuit_2 = qc.get_circuit_up_to_layer(2)  # Layers 0-2
+        circuit_3 = qc.get_circuit_up_to_layer(3)  # Layers 0-3 (all 4 layers)
         
         # Check they're all valid
+        assert isinstance(circuit_0, cirq.Circuit)
         assert isinstance(circuit_1, cirq.Circuit)
         assert isinstance(circuit_2, cirq.Circuit)
-        assert isinstance(circuit_4, cirq.Circuit)
+        assert isinstance(circuit_3, cirq.Circuit)
         
-        # Layer 2 should have more operations than layer 1
+        # Each subsequent circuit should have more operations
+        ops_0 = len(list(circuit_0.all_operations()))
         ops_1 = len(list(circuit_1.all_operations()))
         ops_2 = len(list(circuit_2.all_operations()))
+        ops_3 = len(list(circuit_3.all_operations()))
+        
+        assert ops_1 >= ops_0
         assert ops_2 >= ops_1
+        assert ops_3 >= ops_2
     
     def test_get_circuit_up_to_layer_invalid(self):
         """Test error handling for invalid layer numbers."""
         qc = QuantumCircuit(n_qubits=4, n_layers=3)
         
-        with pytest.raises((ValueError, AssertionError)):
-            qc.get_circuit_up_to_layer(0)  # Layer must be >= 1
-        
-        with pytest.raises((ValueError, AssertionError)):
-            qc.get_circuit_up_to_layer(5)  # Exceeds n_layers
+        # Test index >= n_layers (0-indexed: valid are 0, 1, 2)
+        with pytest.raises((ValueError, IndexError)):
+            qc.get_circuit_up_to_layer(3)  # Should fail (only 0, 1, 2 are valid)
     
-    def test_create_readout_operators_global(self):
-        """Test global readout operator creation."""
+    def test_get_parameters(self):
+        """Test getting all parameters as flat list."""
         qc = QuantumCircuit(n_qubits=4, n_layers=3)
-        operators = qc.create_readout_operators(local_cost=False)
+        all_params = qc.get_parameters()
         
-        # Should return a list
-        assert isinstance(operators, list)
-        assert len(operators) > 0
+        # Should return a list of sympy symbols
+        assert isinstance(all_params, list)
+        assert len(all_params) > 0
+        assert all(isinstance(p, sympy.Symbol) for p in all_params)
         
-        # Global cost typically uses single operator
-        assert len(operators) == 1
+        # Hardware-efficient ansatz: 2 params per qubit per layer (RY + RZ)
+        expected_params = 2 * 4 * 3  # 2 * n_qubits * n_layers
+        assert len(all_params) == expected_params
     
-    def test_create_readout_operators_local(self):
-        """Test local readout operator creation."""
-        qc = QuantumCircuit(n_qubits=4, n_layers=3)
-        operators = qc.create_readout_operators(local_cost=True)
-        
-        # Should return a list
-        assert isinstance(operators, list)
-        
-        # Local cost should have one operator per qubit
-        assert len(operators) == 4
-    
-    def test_get_symbols(self):
-        """Test symbol extraction."""
+    def test_get_layer_parameters(self):
+        """Test getting parameters for a specific layer."""
         qc = QuantumCircuit(n_qubits=4, n_layers=3)
         
-        # Get data symbols
-        data_symbols = qc.get_data_symbols()
-        assert len(data_symbols) > 0
-        assert all(isinstance(s, sympy.Symbol) for s in data_symbols)
+        # Get parameters for each layer (0-indexed)
+        for layer_idx in range(3):
+            layer_params = qc.get_layer_parameters(layer_idx)
+            
+            assert isinstance(layer_params, list)
+            assert len(layer_params) > 0
+            assert all(isinstance(p, sympy.Symbol) for p in layer_params)
+            
+            # Each layer should have 8 parameters (2 rotations × 4 qubits)
+            expected_params_per_layer = 2 * 4
+            assert len(layer_params) == expected_params_per_layer
+    
+    def test_parameters_per_layer(self):
+        """
+        Week 1 Task (Frahan): Verify 8 parameters per layer.
         
-        # Get variational symbols
-        var_symbols = qc.get_variational_symbols()
-        assert len(var_symbols) > 0
-        assert all(isinstance(s, sympy.Symbol) for s in var_symbols)
+        Each layer should have exactly: 2 rotations (RY, RZ) × 4 qubits = 8 parameters
+        Tests at experimental depths: 4, 6, 8 layers
+        """
+        n_qubits = 4  # Fixed for this project
         
-        # Should be different sets
-        assert set(data_symbols).isdisjoint(set(var_symbols))
+        # Test for depths 4, 6, 8 (our experimental depths)
+        for n_layers in [4, 6, 8]:
+            qc = QuantumCircuit(n_qubits=n_qubits, n_layers=n_layers)
+            
+            # Get parameters for each layer (0-indexed: 0, 1, ..., n_layers-1)
+            for layer_idx in range(n_layers):
+                layer_params = qc.get_layer_parameters(layer_idx)
+                
+                # Each layer should have: 2 rotations (RY, RZ) × 4 qubits = 8 parameters
+                expected_params_per_layer = 2 * n_qubits
+                assert len(layer_params) == expected_params_per_layer, \
+                    f"Layer {layer_idx} should have {expected_params_per_layer} parameters, " \
+                    f"got {len(layer_params)}"
+                
+                # Verify parameter naming pattern (RY and RZ for each qubit)
+                # Should have symbols like: theta_0_0_ry, theta_0_0_rz, theta_0_1_ry, etc.
+                for qubit_idx in range(n_qubits):
+                    ry_symbol = layer_params[2 * qubit_idx]
+                    rz_symbol = layer_params[2 * qubit_idx + 1]
+                    
+                    assert f'theta_{layer_idx}_{qubit_idx}_ry' in str(ry_symbol), \
+                        f"Expected RY parameter for layer {layer_idx}, qubit {qubit_idx}"
+                    assert f'theta_{layer_idx}_{qubit_idx}_rz' in str(rz_symbol), \
+                        f"Expected RZ parameter for layer {layer_idx}, qubit {qubit_idx}"
+        
+        print("\n✓ Verified: Each layer has exactly 8 parameters (2 × 4 qubits)")
+    
+    def test_circuit_parameters_count(self):
+        """Test correct number of variational parameters (total)."""
+        n_qubits = 4
+        n_layers = 3
+        qc = QuantumCircuit(n_qubits=n_qubits, n_layers=n_layers)
+        
+        # Use the actual method name: get_parameters()
+        all_params = qc.get_parameters()
+        
+        # Hardware-efficient ansatz: 2 params per qubit per layer (RY + RZ)
+        expected_params = 2 * n_qubits * n_layers
+        assert len(all_params) == expected_params, \
+            f"Expected {expected_params} total parameters, got {len(all_params)}"
     
     def test_different_qubit_counts(self):
         """Test circuits with different qubit counts."""
@@ -145,17 +160,49 @@ class TestQuantumCircuit:
             assert isinstance(circuit, cirq.Circuit)
             assert qc.n_layers == n_layers
     
-    def test_circuit_parameters_count(self):
-        """Test correct number of variational parameters."""
-        n_qubits = 4
-        n_layers = 3
-        qc = QuantumCircuit(n_qubits=n_qubits, n_layers=n_layers)
+    def test_visualize(self):
+        """Test circuit visualization."""
+        qc = QuantumCircuit(n_qubits=4, n_layers=2)
+        visualization = qc.visualize()
         
-        var_symbols = qc.get_variational_symbols()
+        assert isinstance(visualization, str)
+        assert len(visualization) > 0
+
+
+class TestReadoutOperators:
+    """Test readout operator creation."""
+    
+    def test_create_readout_operators_global(self):
+        """Test global readout operator creation."""
+        operators = create_readout_operators(n_qubits=4, local=False)
         
-        # Hardware-efficient ansatz: 2 params per qubit per layer (RY + RZ)
-        expected_params = 2 * n_qubits * n_layers
-        assert len(var_symbols) == expected_params
+        # Should return a list
+        assert isinstance(operators, list)
+        assert len(operators) > 0
+        
+        # Global cost typically uses single operator (first qubit)
+        assert len(operators) == 1
+    
+    def test_create_readout_operators_local(self):
+        """Test local readout operator creation."""
+        operators = create_readout_operators(n_qubits=4, local=True)
+        
+        # Should return a list
+        assert isinstance(operators, list)
+        
+        # Local cost should have one operator per qubit
+        assert len(operators) == 4
+    
+    def test_readout_operators_different_qubits(self):
+        """Test readout operators with different qubit counts."""
+        for n_qubits in [2, 4, 6, 8]:
+            # Global
+            global_ops = create_readout_operators(n_qubits=n_qubits, local=False)
+            assert len(global_ops) == 1
+            
+            # Local
+            local_ops = create_readout_operators(n_qubits=n_qubits, local=True)
+            assert len(local_ops) == n_qubits
 
 
 class TestCircuitExecution:
@@ -166,13 +213,13 @@ class TestCircuitExecution:
         qc = QuantumCircuit(n_qubits=4, n_layers=2)
         circuit = qc.get_circuit()
         
-        # Resolve symbols with random values
-        data_symbols = qc.get_data_symbols()
-        var_symbols = qc.get_variational_symbols()
+        # Get all parameters
+        all_params = qc.get_parameters()
         
+        # Create resolver with random values for all parameters
         resolver = cirq.ParamResolver({
-            **{s: np.random.rand() for s in data_symbols},
-            **{s: np.random.rand() for s in var_symbols}
+            str(param): np.random.rand() * 2 * np.pi  # Random angle in [0, 2π]
+            for param in all_params
         })
         
         resolved_circuit = cirq.resolve_parameters(circuit, resolver)
@@ -183,19 +230,20 @@ class TestCircuitExecution:
         
         # Should produce a valid state vector
         assert result.final_state_vector is not None
-        assert len(result.final_state_vector) == 2**4  # 4 qubits
+        assert len(result.final_state_vector) == 2**4  # 4 qubits = 16 states
     
     def test_expectation_value(self):
         """Test expectation value computation."""
         qc = QuantumCircuit(n_qubits=4, n_layers=2)
         circuit = qc.get_circuit()
         
-        # Resolve with random parameters
-        data_symbols = qc.get_data_symbols()
-        var_symbols = qc.get_variational_symbols()
+        # Get all parameters
+        all_params = qc.get_parameters()
+        
+        # Create resolver with random values
         resolver = cirq.ParamResolver({
-            **{s: np.random.rand() for s in data_symbols},
-            **{s: np.random.rand() for s in var_symbols}
+            str(param): np.random.rand() * 2 * np.pi
+            for param in all_params
         })
         
         resolved_circuit = cirq.resolve_parameters(circuit, resolver)

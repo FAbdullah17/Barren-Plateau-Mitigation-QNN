@@ -11,7 +11,7 @@ class TestMNISTLoader:
     
     def test_load_mnist_binary_basic(self):
         """Test basic data loading with default parameters."""
-        X_train, X_test, y_train, y_test = load_mnist_binary(
+        X_train, y_train, X_test, y_test = load_mnist_binary(
             digit1=3, digit2=6, train_size=100, test_size=20
         )
         
@@ -35,7 +35,7 @@ class TestMNISTLoader:
     
     def test_load_mnist_different_digits(self):
         """Test loading with different digit pairs."""
-        X_train, X_test, y_train, y_test = load_mnist_binary(
+        X_train, y_train, X_test, y_test = load_mnist_binary(
             digit1=0, digit2=1, train_size=50, test_size=10
         )
         
@@ -137,7 +137,7 @@ class TestDataIntegration:
     def test_full_pipeline(self):
         """Test complete pipeline from loading to encoding."""
         # Load data
-        X_train, X_test, y_train, y_test = load_mnist_binary(
+        X_train, y_train, X_test, y_test = load_mnist_binary(
             digit1=3, digit2=6, train_size=100, test_size=20
         )
         
@@ -157,7 +157,7 @@ class TestDataIntegration:
     
     def test_batch_processing(self):
         """Test data can be batched correctly."""
-        X_train, _, y_train, _ = load_mnist_binary(train_size=100, test_size=20)
+        X_train, y_train, _, _ = load_mnist_binary(train_size=100, test_size=20)
         X_encoded, y_encoded = encode_data_for_qnn(X_train, y_train, n_qubits=4)
         
         # Create TensorFlow dataset

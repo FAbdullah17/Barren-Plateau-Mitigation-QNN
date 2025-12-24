@@ -73,11 +73,12 @@ class GradientTracker:
         """
         if len(self.gradient_norms) < window_size:
             return False
-        
+
         recent_norms = self.gradient_norms[-window_size:]
-        mean_recent_norm = np.mean(recent_norms)
-        
-        return mean_recent_norm < self.barren_plateau_threshold
+        mean_recent_norm = float(np.mean(recent_norms))
+
+        # Ensure Python bool is returned (tests check `is True` / `is False`)
+        return bool(mean_recent_norm < float(self.barren_plateau_threshold))
     
     def get_variance_trajectory(self, window_size: int = 50) -> List[float]:
         """
@@ -100,20 +101,23 @@ class GradientTracker:
         return variances
 
 
-def compute_accuracy(predictions: np.ndarray, labels: np.ndarray) -> float:
+def compute_accuracy(labels: np.ndarray, predictions: np.ndarray) -> float:
     """
     Compute classification accuracy.
-    
+
     Args:
+        labels: Ground truth labels (0/1)
         predictions: Model predictions (probabilities)
-        labels: Ground truth labels
-        
+
     Returns:
         Accuracy as percentage
     """
+    if labels.shape[0] != predictions.shape[0]:
+        raise ValueError("Labels and predictions must have the same length")
+
     pred_labels = (predictions > 0.5).astype(int)
-    correct = np.sum(pred_labels == labels)
-    return (correct / len(labels)) * 100.0
+    correct = int(np.sum(pred_labels == labels))
+    return (correct / int(len(labels))) * 100.0
 
 
 def compute_success_rate(accuracies: List[float], threshold: float = 90.0) -> float:

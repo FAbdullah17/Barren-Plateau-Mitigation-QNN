@@ -60,6 +60,12 @@ def load_mnist_binary(
     processed_dir = project_root / 'data' / 'processed'
     processed_dir.mkdir(parents=True, exist_ok=True)
     
+    # Validate digit inputs
+    if not (0 <= digit1 <= 9) or not (0 <= digit2 <= 9):
+        raise ValueError("digit1 and digit2 must be in range 0-9")
+    if digit1 == digit2:
+        raise ValueError("digit1 and digit2 must be different")
+
     # Load MNIST (will cache to project data directory)
     mnist_path = data_dir / 'mnist.npz'
     (x_train, y_train), (x_test, y_test) = tf.keras.datasets.mnist.load_data(path=str(mnist_path))
@@ -84,11 +90,11 @@ def load_mnist_binary(
     x_test = tf.image.resize(
         x_test[..., np.newaxis], image_size, method='bilinear'
     ).numpy().squeeze()
-    
-    # Normalize to [0, 1]
-    x_train = x_train / 255.0
-    x_test = x_test / 255.0
-    
+
+    # Normalize to [0, 1] and cast to float32
+    x_train = (x_train / 255.0).astype(np.float32)
+    x_test = (x_test / 255.0).astype(np.float32)
+
     # Flatten images
     x_train = x_train.reshape(len(x_train), -1)
     x_test = x_test.reshape(len(x_test), -1)
@@ -98,12 +104,16 @@ def load_mnist_binary(
         train_indices = np.random.choice(len(x_train), train_size, replace=False)
         x_train = x_train[train_indices]
         y_train = y_train[train_indices]
-    
+
     if len(x_test) > test_size:
         test_indices = np.random.choice(len(x_test), test_size, replace=False)
         x_test = x_test[test_indices]
         y_test = y_test[test_indices]
     
+    # Cast labels to int32 and ensure shapes
+    y_train = y_train.astype(np.int32)
+    y_test = y_test.astype(np.int32)
+
     # Optionally save the filtered/processed dataset as compressed .npz
     if save_filtered:
         filtered_path = processed_dir / filtered_filename
@@ -116,21 +126,45 @@ def load_mnist_binary(
         )
         print(f"✓ Filtered dataset saved to: {filtered_path}")
 
+    # Return in canonical order expected by callers/tests: X_train, y_train, X_test, y_test
     return x_train, y_train, x_test, y_test
 
 
-def encode_data_for_qnn(data: np.ndarray) -> np.ndarray:
+def encode_data_for_qnn(data: np.ndarray, labels: np.ndarray, n_qubits: int = 4):
     """
-    Encode classical data for quantum neural network input.
-    
+    Encode classical data and labels for QNN input.
+
     Args:
         data: Flattened image data, shape (n_samples, n_features)
-        
+        labels: Binary labels (0 or 1)
+        n_qubits: Number of qubits to encode (used for validation)
+
     Returns:
-        Encoded data scaled to rotation angles
+        Tuple of (encoded_data, encoded_labels)
+        - encoded_data: data scaled to rotation angles (copy)
+        - encoded_labels: labels converted to -1/+1 (copy)
     """
+    # Validate shapes
+    if data.shape[0] != labels.shape[0]:
+        raise ValueError("Number of samples and labels must match")
+
+    # Basic validation for feature size vs qubits (expect features >= n_qubits)
+    if data.shape[1] < n_qubits:
+        raise ValueError("Number of features less than number of qubits")
+
+    # Work on copies to preserve original arrays
+    data_copy = np.array(data, copy=True)
+    labels_copy = np.array(labels, copy=True)
+
     # Scale to rotation angles [0, π]
-    return data * np.pi
+    encoded_data = data_copy * np.pi
+
+    # Convert labels: 0 -> -1, 1 -> +1
+    if not np.all(np.isin(labels_copy, [0, 1])):
+        raise ValueError("Labels must be binary (0 or 1)")
+    encoded_labels = np.where(labels_copy == 0, -1, 1).astype(np.int32)
+
+    return encoded_data, encoded_labels
 
 
 if __name__ == "__main__":
