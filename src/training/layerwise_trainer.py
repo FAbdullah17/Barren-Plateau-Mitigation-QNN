@@ -249,6 +249,8 @@ class LayerwiseTrainer:
         """Single training step."""
         with tf.GradientTape() as tape:
             predictions = model(circuits, training=True)
+            # Squeeze predictions to match labels shape (batch,)
+            predictions = tf.squeeze(predictions, axis=-1)
             loss = self.loss_fn(labels, predictions)
         
         gradients = tape.gradient(loss, model.trainable_variables)
@@ -264,6 +266,8 @@ class LayerwiseTrainer:
     def _evaluate(self, model, circuits, labels):
         """Evaluate on given data."""
         predictions = model(circuits, training=False)
+        # Squeeze predictions to match labels shape (batch,)
+        predictions = tf.squeeze(predictions, axis=-1)
         loss = self.loss_fn(labels, predictions).numpy()
         
         predictions_binary = tf.cast(predictions > 0.5, tf.int32)

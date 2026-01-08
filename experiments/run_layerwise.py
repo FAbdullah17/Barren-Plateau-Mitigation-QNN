@@ -17,6 +17,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import yaml
 import json
+import argparse
 import tensorflow_quantum as tfq
 import cirq
 import numpy as np
@@ -30,7 +31,28 @@ from src.evaluation import plot_training_history
 def load_config(config_path: str = "configs/layerwise_test.yaml"):
     """Load configuration from YAML file."""
     with open(config_path, 'r') as f:
-        return yaml.safe_load(f)
+        config = yaml.safe_load(f)
+    
+    # Flatten nested config structure for easier access
+    flat_config = {
+        'experiment_name': config['experiment']['name'],
+        'approach': config['experiment']['approach'],
+        'n_qubits': config['model']['n_qubits'],
+        'target_layers': config['model']['target_layers'],
+        'learning_rate': config['training']['learning_rate'],
+        'batch_size': config['training']['batch_size'],
+        'epochs_per_layer': config['training']['epochs_per_layer'],
+        'finetune_epochs': config['training']['finetune_epochs'],
+        'local_cost': config['training']['local_cost'],
+        'digit1': config['data']['digit1'],
+        'digit2': config['data']['digit2'],
+        'train_size': config['data']['train_size'],
+        'test_size': config['data']['test_size'],
+        'image_size': config['data']['image_size'],
+        'results_dir': config['output']['results_dir'],
+        'random_seeds': config['random_seeds']
+    }
+    return flat_config, config  # Return both flat and original
 
 
 def convert_to_circuits(data: np.ndarray, n_qubits: int = 4):
@@ -51,15 +73,28 @@ def convert_to_circuits(data: np.ndarray, n_qubits: int = 4):
 
 def main():
     """Run layerwise experiment."""
+    parser = argparse.ArgumentParser(description='Run layerwise QNN experiment')
+    parser.add_argument('config', type=str, help='Path to config YAML file')
+    parser.add_argument('--seed', type=int, default=None, help='Random seed (overrides config)')
+    args = parser.parse_args()
+    
     print("="*70)
     print("LAYERWISE EXPERIMENT: Incremental Layer-by-Layer Training")
     print("="*70)
     
     # Load configuration
-    config = load_config()
-    print("\nConfiguration:")
-    for key, value in config.items():
-        print(f"  {key}: {value}")
+    config, full_config = load_config(args.config)
+    
+    # Use provided seed or first seed from config
+    seed = args.seed if args.seed is not None else config['random_seeds'][0]
+    
+    print(f"\nConfiguration: {args.config}")
+    print(f"  Target Layers: {config['target_layers']}")
+    print(f"  Epochs per Layer: {config['epochs_per_layer']}")
+    print(f"  Finetune Epochs: {config['finetune_epochs']}")
+    print(f"  Learning Rate: {config['learning_rate']}")
+    print(f"  Batch Size: {config['batch_size']}")
+    print(f"  Random Seed: {seed}")
     
     # Extract nested config values
     data_cfg = config['data']
@@ -107,8 +142,8 @@ def main():
         val_labels=y_test
     )
     
-    # Save results
-    results_dir = Path("results/layerwise")
+    # Create results directory with depth/seed structure
+    results_dir = Path(config['results_dir']) / f"seed_{seed}"
     results_dir.mkdir(parents=True, exist_ok=True)
     
     # Save metrics
@@ -136,6 +171,7 @@ def main():
         save_path=str(plot_path),
         title=f"Layerwise Training - {model_cfg['target_layers']} Layers"
     )
+    print(f"Plot saved to {plot_path}")
     
     # Print summary
     print("\n" + "="*70)
