@@ -28,7 +28,7 @@ from src.training import LayerwiseTrainer
 from src.evaluation import plot_training_history
 
 
-def load_config(config_path: str):
+def load_config(config_path: str = "configs/layerwise_test.yaml"):
     """Load configuration from YAML file."""
     with open(config_path, 'r') as f:
         config = yaml.safe_load(f)
@@ -96,14 +96,20 @@ def main():
     print(f"  Batch Size: {config['batch_size']}")
     print(f"  Random Seed: {seed}")
     
+    # Extract nested config values
+    data_cfg = config['data']
+    model_cfg = config['model']
+    training_cfg = config['training']
+    seed = config['random_seeds'][0] if 'random_seeds' in config else 42
+    
     # Load and prepare data
     print("\nLoading MNIST data...")
     X_train, y_train, X_test, y_test = load_mnist_binary(
-        digit1=config['digit1'],
-        digit2=config['digit2'],
-        train_size=config['train_size'],
-        test_size=config['test_size'],
-        image_size=tuple(config['image_size']),
+        digit1=data_cfg['digit1'],
+        digit2=data_cfg['digit2'],
+        train_size=data_cfg['train_size'],
+        test_size=data_cfg['test_size'],
+        image_size=tuple(data_cfg['image_size']),
         seed=seed
     )
     print(f"Training samples: {len(X_train)}")
@@ -111,19 +117,19 @@ def main():
     
     # Convert to quantum circuits
     print("\nConverting data to quantum circuits...")
-    train_circuits = convert_to_circuits(X_train, n_qubits=config['n_qubits'])
-    test_circuits = convert_to_circuits(X_test, n_qubits=config['n_qubits'])
+    train_circuits = convert_to_circuits(X_train, n_qubits=model_cfg['n_qubits'])
+    test_circuits = convert_to_circuits(X_test, n_qubits=model_cfg['n_qubits'])
     
     # Initialize trainer
     print("\nInitializing layerwise trainer...")
     trainer = LayerwiseTrainer(
-        n_qubits=config['n_qubits'],
-        target_layers=config['target_layers'],
-        learning_rate=config['learning_rate'],
-        batch_size=config['batch_size'],
-        epochs_per_layer=config['epochs_per_layer'],
-        finetune_epochs=config['finetune_epochs'],
-        local_cost=config['local_cost'],
+        n_qubits=model_cfg['n_qubits'],
+        target_layers=model_cfg['target_layers'],
+        learning_rate=training_cfg['learning_rate'],
+        batch_size=training_cfg['batch_size'],
+        epochs_per_layer=training_cfg['epochs_per_layer'],
+        finetune_epochs=training_cfg['finetune_epochs'],
+        local_cost=training_cfg['local_cost'],
         seed=seed
     )
     
@@ -141,31 +147,29 @@ def main():
     results_dir.mkdir(parents=True, exist_ok=True)
     
     # Save metrics
-    metrics_path = results_dir / "metrics.json"
-    save_results = {
-        'config': full_config,  # Save full config
-        'seed': int(seed),
-        'final_train_loss': float(results['final_train_loss']),
-        'final_train_acc': float(results['final_train_acc']),
-        'final_val_loss': float(results['final_val_loss']),
-        'final_val_acc': float(results['final_val_acc']),
-        'test_loss': float(results['test_loss']),
-        'test_acc': float(results['test_acc']),
-        'training_time': float(results['training_time']),
-        'gradient_stats': {k: float(v) for k, v in results['gradient_stats'].items()},
-        'barren_plateau_detected': bool(results['barren_plateau_detected']),
-        'history': {k: [float(v) for v in vals] for k, vals in results['history'].items()}
-    }
+    metrics_path = results_dir / f"layerwise_L{model_cfg['target_layers']}_metrics.json"
     with open(metrics_path, 'w') as f:
+        save_results = {
+            'config': config,
+            'final_train_loss': float(results['final_train_loss']),
+            'final_train_acc': float(results['final_train_acc']),
+            'final_val_loss': float(results['final_val_loss']),
+            'final_val_acc': float(results['final_val_acc']),
+            'test_loss': float(results['test_loss']),
+            'test_acc': float(results['test_acc']),
+            'training_time': float(results['training_time']),
+            'gradient_stats': results['gradient_stats'],
+            'barren_plateau_detected': bool(results['barren_plateau_detected'])
+        }
         json.dump(save_results, f, indent=2)
     print(f"\nMetrics saved to {metrics_path}")
     
     # Plot and save training history
-    plot_path = results_dir / "training_history.png"
+    plot_path = results_dir / f"layerwise_L{model_cfg['target_layers']}_history.png"
     plot_training_history(
         results['history'],
         save_path=str(plot_path),
-        title=f"Layerwise Training - {config['target_layers']} Layers (Seed {seed})"
+        title=f"Layerwise Training - {model_cfg['target_layers']} Layers"
     )
     print(f"Plot saved to {plot_path}")
     

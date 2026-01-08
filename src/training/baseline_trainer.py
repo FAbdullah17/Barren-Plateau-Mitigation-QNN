@@ -6,6 +6,14 @@ Developer Assignment (Weeks 3-4):
     Experiments: Asma (4L Week 7), Frahan (6L Week 8), Fahad (8L Week 9)
 """
 
+import sys
+from pathlib import Path
+
+# Add project root to Python path
+project_root = Path(__file__).parent.parent.parent
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
+
 import tensorflow as tf
 import tensorflow_quantum as tfq
 import numpy as np
@@ -13,8 +21,8 @@ from typing import Dict, List, Optional, Tuple
 import time
 from tqdm import tqdm
 
-from ..models import QuantumNeuralNetwork
-from ..evaluation.metrics import GradientTracker
+from src.models import QuantumNeuralNetwork
+from src.evaluation.metrics import GradientTracker
 
 
 class BaselineTrainer:
