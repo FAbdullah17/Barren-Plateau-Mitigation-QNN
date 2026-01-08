@@ -2,7 +2,6 @@ __pycache__/
 .ipynb_checkpoints/
 .env
 *.pyc
-results/*
 !results/.gitkeep
 wandb/
 venv/

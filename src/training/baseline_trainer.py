@@ -180,6 +180,8 @@ class BaselineTrainer:
         """Single training step."""
         with tf.GradientTape() as tape:
             predictions = self.model(circuits, training=True)
+            # Squeeze predictions to match labels shape (batch,)
+            predictions = tf.squeeze(predictions, axis=-1)
             loss = self.loss_fn(labels, predictions)
         
         gradients = tape.gradient(loss, self.model.trainable_variables)
@@ -196,6 +198,8 @@ class BaselineTrainer:
     def _evaluate(self, circuits, labels):
         """Evaluate on given data."""
         predictions = self.model(circuits, training=False)
+        # Squeeze predictions to match labels shape (batch,)
+        predictions = tf.squeeze(predictions, axis=-1)
         loss = self.loss_fn(labels, predictions).numpy()
         
         predictions_binary = tf.cast(predictions > 0.5, tf.int32)
