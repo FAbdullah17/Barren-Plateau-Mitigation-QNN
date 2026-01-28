@@ -27,7 +27,7 @@ from src.training import LayerwiseTrainer
 from src.evaluation import plot_training_history
 
 
-def load_config(config_path: str = "configs/layerwise_test.yaml"):
+def load_config(config_path: str):
     """Load configuration from YAML file."""
     with open(config_path, 'r') as f:
         return yaml.safe_load(f)
@@ -51,21 +51,35 @@ def convert_to_circuits(data: np.ndarray, n_qubits: int = 4):
 
 def main():
     """Run layerwise experiment."""
+    import argparse
+    
+    parser = argparse.ArgumentParser(description='Run layerwise QNN experiment')
+    parser.add_argument('config', type=str, help='Path to config YAML file')
+    parser.add_argument('--seed', type=int, default=None, help='Random seed (overrides config)')
+    args = parser.parse_args()
+    
     print("="*70)
     print("LAYERWISE EXPERIMENT: Incremental Layer-by-Layer Training")
     print("="*70)
     
     # Load configuration
-    config = load_config()
-    print("\nConfiguration:")
-    for key, value in config.items():
-        print(f"  {key}: {value}")
+    config = load_config(args.config)
+    
+    # Use provided seed or first seed from config
+    seed = args.seed if args.seed is not None else (config['random_seeds'][0] if 'random_seeds' in config else 42)
+    
+    print(f"\nConfiguration: {args.config}")
     
     # Extract nested config values
     data_cfg = config['data']
     model_cfg = config['model']
     training_cfg = config['training']
-    seed = config['random_seeds'][0] if 'random_seeds' in config else 42
+    
+    print(f"  Layers: {model_cfg['target_layers']}")
+    print(f"  Epochs per layer: {training_cfg['epochs_per_layer']}")
+    print(f"  Learning Rate: {training_cfg['learning_rate']}")
+    print(f"  Batch Size: {training_cfg['batch_size']}")
+    print(f"  Random Seed: {seed}")
     
     # Load and prepare data
     print("\nLoading MNIST data...")
@@ -108,33 +122,37 @@ def main():
     )
     
     # Save results
-    results_dir = Path("results/layerwise")
+    output_cfg = config.get('output', {})
+    results_base = output_cfg.get('results_dir', 'results/layerwise')
+    results_dir = Path(results_base) / f"seed_{seed}"
     results_dir.mkdir(parents=True, exist_ok=True)
     
+    
     # Save metrics
-    metrics_path = results_dir / f"layerwise_L{model_cfg['target_layers']}_metrics.json"
-    with open(metrics_path, 'w') as f:
-        save_results = {
-            'config': config,
-            'final_train_loss': float(results['final_train_loss']),
-            'final_train_acc': float(results['final_train_acc']),
-            'final_val_loss': float(results['final_val_loss']),
-            'final_val_acc': float(results['final_val_acc']),
-            'test_loss': float(results['test_loss']),
-            'test_acc': float(results['test_acc']),
-            'training_time': float(results['training_time']),
-            'gradient_stats': results['gradient_stats'],
-            'barren_plateau_detected': bool(results['barren_plateau_detected'])
+    metrics_path = results_dir / "metrics.json"
+    
+    save_results = {
+        'config': config,
+        'final_train_loss': float(results['final_train_loss']),
+        'final_train_acc': float(results['final_train_acc']),
+        'final_val_loss': float(results['final_val_loss']),
+        'final_val_acc': float(results['final_val_acc']),
+        'test_loss': float(results['test_loss']),
+        'test_acc': float(results['test_acc']),
+        'training_time': float(results['training_time']),
+        'gradient_stats': results['gradient_stats'],
+        'barren_plateau_detected': bool(results['barren_plateau_detected'])
         }
+    with open(metrics_path, 'w') as f:
         json.dump(save_results, f, indent=2)
     print(f"\nMetrics saved to {metrics_path}")
     
     # Plot and save training history
-    plot_path = results_dir / f"layerwise_L{model_cfg['target_layers']}_history.png"
+    plot_path = results_dir / "training_history.png"
     plot_training_history(
         results['history'],
         save_path=str(plot_path),
-        title=f"Layerwise Training - {model_cfg['target_layers']} Layers"
+        title=f"Layerwise Training - {model_cfg['target_layers']} Layers (Seed {seed})"
     )
     
     # Print summary
