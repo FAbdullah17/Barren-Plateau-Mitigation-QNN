@@ -6,6 +6,14 @@ Developer Assignment (Weeks 3-4):
     Experiments: Asma (4L Week 7), Frahan (6L Week 8), Fahad (8L Week 9)
 """
 
+import sys
+from pathlib import Path
+
+# Add project root to Python path
+project_root = Path(__file__).parent.parent.parent
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
+
 import tensorflow as tf
 import tensorflow_quantum as tfq
 import numpy as np
@@ -13,8 +21,8 @@ from typing import Dict, Optional
 import time
 from tqdm import tqdm
 
-from ..models import LayerwiseQNN
-from ..evaluation.metrics import GradientTracker
+from src.models import LayerwiseQNN
+from src.evaluation.metrics import GradientTracker
 
 
 class LayerwiseTrainer:
@@ -24,7 +32,7 @@ class LayerwiseTrainer:
         self,
         n_qubits: int = 4,
         target_layers: int = 4,
-        learning_rate: float = 0.01,
+        learning_rate: float = 1e-4,
         batch_size: int = 20,
         epochs_per_layer: int = 10,
         finetune_epochs: int = 10,
@@ -242,11 +250,12 @@ class LayerwiseTrainer:
                   f"Val Loss: {val_loss:.4f} - Val Acc: {val_acc:.4f} - "
                   f"Grad Norm: {grad_norm:.6f}")
     
-    @tf.function
     def _train_step(self, model, optimizer, circuits, labels):
         """Single training step."""
         with tf.GradientTape() as tape:
             predictions = model(circuits, training=True)
+            # Squeeze predictions to match labels shape (batch,)
+            predictions = tf.squeeze(predictions, axis=-1)
             loss = self.loss_fn(labels, predictions)
         
         gradients = tape.gradient(loss, model.trainable_variables)
@@ -262,6 +271,8 @@ class LayerwiseTrainer:
     def _evaluate(self, model, circuits, labels):
         """Evaluate on given data."""
         predictions = model(circuits, training=False)
+        # Squeeze predictions to match labels shape (batch,)
+        predictions = tf.squeeze(predictions, axis=-1)
         loss = self.loss_fn(labels, predictions).numpy()
         
         predictions_binary = tf.cast(predictions > 0.5, tf.int32)
