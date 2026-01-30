@@ -5,9 +5,22 @@ Developer Assignment (Weeks 1-2):
     Review: Asma Zubair - Validation framework
 """
 
+import os
+# Suppress TensorFlow warnings
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # Suppress TF logging (0=all, 3=errors only)
+os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'  # Disable oneDNN custom operations
+
+import warnings
+warnings.filterwarnings('ignore', category=DeprecationWarning)
+warnings.filterwarnings('ignore', category=FutureWarning)
+
 import tensorflow as tf
 import numpy as np
 from typing import Tuple, Optional
+from pathlib import Path
+
+# Disable TensorFlow logging
+tf.get_logger().setLevel('ERROR')
 
 
 def load_mnist_binary(
@@ -16,7 +29,9 @@ def load_mnist_binary(
     train_size: int = 1000,
     test_size: int = 200,
     image_size: Tuple[int, int] = (4, 4),
-    seed: Optional[int] = None
+    seed: Optional[int] = None,
+    save_filtered: bool = False,
+    filtered_filename: str = 'mnist_3_6.npz'
 ) -> Tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """
     Load and preprocess MNIST data for binary classification.
@@ -38,8 +53,16 @@ def load_mnist_binary(
         np.random.seed(seed)
         tf.random.set_seed(seed)
     
-    # Load MNIST
-    (x_train, y_train), (x_test, y_test) = tf.keras.datasets.mnist.load_data()
+    # Set up data directory in project root
+    project_root = Path(__file__).parent.parent.parent
+    data_dir = project_root / 'data' / 'raw'
+    data_dir.mkdir(parents=True, exist_ok=True)
+    processed_dir = project_root / 'data' / 'processed'
+    processed_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Load MNIST (will cache to project data directory)
+    mnist_path = data_dir / 'mnist.npz'
+    (x_train, y_train), (x_test, y_test) = tf.keras.datasets.mnist.load_data(path=str(mnist_path))
     
     # Filter for binary classification
     train_filter = np.isin(y_train, [digit1, digit2])
@@ -81,6 +104,18 @@ def load_mnist_binary(
         x_test = x_test[test_indices]
         y_test = y_test[test_indices]
     
+    # Optionally save the filtered/processed dataset as compressed .npz
+    if save_filtered:
+        filtered_path = processed_dir / filtered_filename
+        np.savez_compressed(
+            filtered_path,
+            X_train=x_train,
+            y_train=y_train,
+            X_test=x_test,
+            y_test=y_test
+        )
+        print(f"✓ Filtered dataset saved to: {filtered_path}")
+
     return x_train, y_train, x_test, y_test
 
 
@@ -99,8 +134,8 @@ def encode_data_for_qnn(data: np.ndarray) -> np.ndarray:
 
 
 if __name__ == "__main__":
-    # Test data loading
-    X_train, y_train, X_test, y_test = load_mnist_binary(seed=42)
+    # Test data loading and save filtered dataset locally
+    X_train, y_train, X_test, y_test = load_mnist_binary(seed=42, save_filtered=True)
     print(f"Training set: {X_train.shape}, Labels: {y_train.shape}")
     print(f"Test set: {X_test.shape}, Labels: {y_test.shape}")
     print(f"Label distribution (train): {np.bincount(y_train)}")
