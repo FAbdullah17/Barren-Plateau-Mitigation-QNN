@@ -139,7 +139,7 @@ class BaselineTrainer:
                 grad_var = 0.0
             
             # Track gradients
-            self.gradient_tracker.update(epoch_gradients)
+            self.gradient_tracker.update(valid_gradients)
             
             # Store history
             self.history['train_loss'].append(train_loss)
