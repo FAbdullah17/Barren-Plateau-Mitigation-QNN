@@ -138,8 +138,13 @@ class BaselineTrainer:
             val_loss, val_acc = self._evaluate(val_circuits, val_labels)
             
             # Gradient statistics
-            grad_norm = np.mean([np.linalg.norm(g) for g in epoch_gradients])
-            grad_var = np.var([np.linalg.norm(g) for g in epoch_gradients])
+            valid_gradients = [g for g in epoch_gradients if g is not None]
+            if valid_gradients:
+                grad_norm = np.mean([np.linalg.norm(g) for g in valid_gradients])
+                grad_var = np.var([np.linalg.norm(g) for g in valid_gradients])
+            else:
+                grad_norm = 0.0
+                grad_var = 0.0
             
             # Track gradients
             self.gradient_tracker.update(epoch_gradients)
