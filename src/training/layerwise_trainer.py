@@ -1,4 +1,4 @@
-"""Layerwise training implementation (Skolik et al., 2020).
+"""Layerwise training implementation (Skolik et al., 2020)
 
 Developer Assignment (Weeks 3-4):
     Primary: Asma Zubair - Layerwise approach implementation
