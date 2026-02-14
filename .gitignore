@@ -4,3 +4,8 @@ __pycache__/
 *.pyc
 wandb/
 venv/
+wandb/
+venv/
+.venv/
+env/
+FAHAD_PROGRESS.md

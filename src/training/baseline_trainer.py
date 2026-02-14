@@ -6,6 +6,14 @@ Developer Assignment (Weeks 3-4):
     Experiments: Asma (4L Week 7), Frahan (6L Week 8), Fahad (8L Week 9)
 """
 
+import sys
+from pathlib import Path
+
+# Add project root to Python path
+project_root = Path(__file__).parent.parent.parent
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
+
 import tensorflow as tf
 import tensorflow_quantum as tfq
 import numpy as np
@@ -13,8 +21,8 @@ from typing import Dict, List, Optional, Tuple
 import time
 from tqdm import tqdm
 
-from ..models import QuantumNeuralNetwork
-from ..evaluation.metrics import GradientTracker
+from src.models import QuantumNeuralNetwork
+from src.evaluation.metrics import GradientTracker
 
 
 class BaselineTrainer:
@@ -120,7 +128,7 @@ class BaselineTrainer:
                 loss, acc, gradients = self._train_step(batch_circuits, batch_labels)
                 epoch_loss.append(loss.numpy())
                 epoch_acc.append(acc.numpy())
-                epoch_gradients.extend([g.numpy() if g is not None else None for g in gradients])
+                epoch_gradients.extend([g.numpy() for g in gradients])
             
             # Compute metrics
             train_loss = np.mean(epoch_loss)
@@ -179,10 +187,14 @@ class BaselineTrainer:
         
         return results
     
+    # Note: @tf.function removed for quantum circuit compatibility
+    # TFQ already uses graph compilation internally
     def _train_step(self, circuits, labels):
         """Single training step."""
         with tf.GradientTape() as tape:
             predictions = self.model(circuits, training=True)
+            # Squeeze predictions to match labels shape (batch,)
+            predictions = tf.squeeze(predictions, axis=-1)
             loss = self.loss_fn(labels, predictions)
         
         gradients = tape.gradient(loss, self.model.trainable_variables)
@@ -193,11 +205,14 @@ class BaselineTrainer:
         labels_int = tf.cast(labels, tf.int32)
         accuracy = tf.reduce_mean(tf.cast(tf.equal(predictions_binary, labels_int), tf.float32))
         
+        # Return TensorFlow tensors (not numpy), let caller convert if needed
         return loss, accuracy, gradients
     
     def _evaluate(self, circuits, labels):
         """Evaluate on given data."""
         predictions = self.model(circuits, training=False)
+        # Squeeze predictions to match labels shape (batch,)
+        predictions = tf.squeeze(predictions, axis=-1)
         loss = self.loss_fn(labels, predictions).numpy()
         
         predictions_binary = tf.cast(predictions > 0.5, tf.int32)

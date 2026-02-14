@@ -5,12 +5,21 @@ Developer Assignment (Weeks 1-2):
     Review: Asma Zubair - Layerwise model structure
 """
 
+import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
+
 import tensorflow as tf
 import tensorflow_quantum as tfq
 import cirq
 import numpy as np
 from typing import Optional, List
-from .quantum_circuit import QuantumCircuit, create_readout_operators
+import sys
+from pathlib import Path
+
+# Add parent directory to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from models.quantum_circuit import QuantumCircuit, create_readout_operators
 
 
 class QuantumNeuralNetwork(tf.keras.Model):

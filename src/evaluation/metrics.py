@@ -167,11 +167,24 @@ if __name__ == "__main__":
     # Test gradient tracker
     tracker = GradientTracker()
     
-    # Simulate gradients
-    for i in range(100):
-        fake_gradients = [np.random.randn(10) * (0.1 / (i + 1))]
-        tracker.update(fake_gradients)
+    # Simulate barren plateau: gradients decay EXPONENTIALLY (not linearly)
+    # This mimics real deep quantum circuits where gradients vanish exponentially
+    print("Simulating barren plateau with exponentially decaying gradients...")
+    print("(Threshold for detection: 1e-6)\n")
     
+    for i in range(100):
+        # Exponential decay: starts at ~1e-4, decays to ~1e-9 by epoch 100
+        # Higher decay rate (0.12) ensures gradients fall well below threshold (1e-6)
+        scale = 1e-4 * np.exp(-0.12 * i)
+        fake_gradients = [np.random.randn(10) * scale]
+        tracker.update(fake_gradients)
+        
+        # Print every 20 epochs to show decay
+        if i % 20 == 0:
+            grad_norm = np.linalg.norm(fake_gradients[0])
+            print(f"  Epoch {i:3d}: gradient norm = {grad_norm:.2e}")
+    
+    print()
     stats = tracker.get_statistics()
     print("Gradient Statistics:")
     for key, value in stats.items():
