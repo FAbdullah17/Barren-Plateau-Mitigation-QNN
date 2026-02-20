@@ -1,0 +1,81 @@
+{
+  "config": {
+    "experiment": {
+      "name": "layerwise_8layer",
+      "approach": "layerwise",
+      "description": "Layerwise training on 8-layer quantum circuit - critical depth test"
+    },
+    "model": {
+      "n_qubits": 4,
+      "target_layers": 8,
+      "circuit_type": "hardware_efficient",
+      "data_reuploading": false
+    },
+    "training": {
+      "optimizer": "adam",
+      "learning_rate": 0.01,
+      "batch_size": 20,
+      "epochs_per_layer": 10,
+      "finetune_epochs": 10,
+      "cost_function": "global",
+      "local_cost": false,
+      "freezing_strategy": "immediate"
+    },
+    "data": {
+      "dataset": "mnist",
+      "digit1": 3,
+      "digit2": 6,
+      "train_size": 1000,
+      "test_size": 200,
+      "image_size": [
+        4,
+        4
+      ],
+      "normalization": "min_max",
+      "preprocessing": "downsample_bilinear"
+    },
+    "quantum": {
+      "shots": 1024,
+      "backend": "cirq_simulator"
+    },
+    "metrics": {
+      "track_gradients": true,
+      "gradient_variance": true,
+      "gradient_norm": true,
+      "barren_plateau_threshold": 1e-06,
+      "success_threshold": 90.0,
+      "track_per_layer": true
+    },
+    "random_seeds": [
+      42,
+      123,
+      456,
+      789,
+      101112
+    ],
+    "output": {
+      "results_dir": "results/layerwise/depth_8",
+      "save_checkpoints": true,
+      "save_gradients": true,
+      "log_frequency": 1
+    }
+  },
+  "seed": 101112,
+  "final_train_loss": 0.5318151712417603,
+  "final_train_acc": 0.7250000238418579,
+  "final_val_loss": 0.5322492122650146,
+  "final_val_acc": 0.7450000047683716,
+  "test_loss": 0.5322492122650146,
+  "test_acc": 0.7450000047683716,
+  "training_time": 2027.660549879074,
+  "gradient_stats": {
+    "mean_norm": 0.19696302711963654,
+    "std_norm": 0.13478302955627441,
+    "variance": 0.01816646382212639,
+    "min_norm": 0.00038045644760131836,
+    "max_norm": 1.0019859075546265,
+    "median_norm": 0.16569259762763977,
+    "total_updates": 4500
+  },
+  "barren_plateau_detected": false
+}
