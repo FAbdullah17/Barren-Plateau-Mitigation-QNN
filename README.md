@@ -264,7 +264,7 @@ All dependencies with pinned versions are listed in [`requirements.txt`](require
 ## 📁 Project Structure
 
 ```
-Hybrid-QNNs/
+Barren-Plateau-Mitigation-QNN/
 │
 ├── 📄 README.md                          # This file
 ├── 📄 CONTRIBUTING.md                    # Contribution guidelines
@@ -393,8 +393,8 @@ Hybrid-QNNs/
 #### Step 1: Clone the Repository
 
 ```bash
-git clone https://github.com/FAbdullah17/Hybrid-QNNs.git
-cd Hybrid-QNNs
+git clone https://github.com/FAbdullah17/Barren-Plateau-Mitigation-QNN.git
+cd Barren-Plateau-Mitigation-QNN
 ```
 
 #### Step 2: Create Virtual Environment
@@ -1086,7 +1086,7 @@ This project is licensed under the **MIT License** — see the [LICENSE](LICENSE
 ```
 MIT License
 
-Copyright (c) 2025 Hybrid-QNNs Research Team
+Copyright (c) 2025 Barren-Plateau-Mitigation-QNN Research Team
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

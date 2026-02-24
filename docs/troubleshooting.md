@@ -179,7 +179,7 @@ sed -i 's/\r$//' scripts/*.py experiments/*.py
 ### Path Issues
 Use forward slashes and Linux-style paths in WSL:
 ```bash
-cd /mnt/d/Programs/PF/Hybrid-QNNs
+cd /mnt/d/Programs/PF/Barren-Plateau-Mitigation-QNN
 ```
 
 ---

@@ -1,4 +1,4 @@
-# Contributing to Hybrid-QNNs
+# Contributing to Barren-Plateau-Mitigation-QNN
 
 Thank you for considering contributing to the **Barren Plateau Mitigation in Quantum Neural Networks** project! This document provides comprehensive guidelines and best practices for contributing to this research codebase.
 
@@ -50,12 +50,12 @@ Before contributing, ensure you have:
 1. **Fork the repository** on GitHub
 2. **Clone your fork** locally:
    ```bash
-   git clone https://github.com/<your-username>/Hybrid-QNNs.git
-   cd Hybrid-QNNs
+   git clone https://github.com/<your-username>/Barren-Plateau-Mitigation-QNN.git
+   cd Barren-Plateau-Mitigation-QNN
    ```
 3. **Add the upstream remote**:
    ```bash
-   git remote add upstream https://github.com/FAbdullah17/Hybrid-QNNs.git
+   git remote add upstream https://github.com/FAbdullah17/Barren-Plateau-Mitigation-QNN.git
    ```
 4. **Create and activate a virtual environment**:
    ```bash
@@ -104,7 +104,7 @@ python -m pytest tests/ -v
 Understanding the project layout is essential before contributing:
 
 ```
-Hybrid-QNNs/
+Barren-Plateau-Mitigation-QNN/
 ├── src/                        # Core source code
 │   ├── data/                   # Data loading and preprocessing
 │   │   └── mnist_loader.py     # MNIST binary classification loader
@@ -526,7 +526,7 @@ When requesting features, describe:
 If you have questions about contributing, please:
 
 1. Check the existing [documentation](docs/)
-2. Search for related [issues](https://github.com/FAbdullah17/Hybrid-QNNs/issues)
+2. Search for related [issues](https://github.com/FAbdullah17/Barren-Plateau-Mitigation-QNN/issues)
 3. Open a new issue with the `question` label
 
 Thank you for contributing to advancing quantum machine learning research! 🚀

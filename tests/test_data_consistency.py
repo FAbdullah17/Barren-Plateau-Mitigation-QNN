@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-Data Pipeline Consistency Tests for Hybrid-QNNs.
+Data Pipeline Consistency Tests for Barren-Plateau-Mitigation-QNN.
 
 Verifies that data loading and quantum encoding are deterministic
 and consistent across multiple calls with the same seed.

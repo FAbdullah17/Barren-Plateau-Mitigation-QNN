@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-Batch experiment runner for Hybrid-QNNs project.
+Batch experiment runner for Barren-Plateau-Mitigation-QNN project.
 Runs multiple seeds for a given approach and configuration.
 
 Usage:
