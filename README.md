@@ -130,8 +130,8 @@ Our experiments provide clear empirical evidence of the barren plateau phenomeno
 | Depth | Baseline Accuracy | Gradient Norm | Trainable? |
 |-------|-------------------|---------------|------------|
 | 4 layers | 73.8% ± 2.2% | ~0.28 | ✅ Yes |
-| 6 layers | 73.9% ± 2.1% | ~0.22 | ✅ Yes |
-| 8 layers | **52.7% ± 1.1%** | ~0.22 | ❌ No |
+| 6 layers | 73.9% ± 2.1% | ~0.28 | ✅ Yes |
+| 8 layers | **52.7% ± 1.1%** | ~0.22 | ⚠️ Degraded — validates BP onset |
 
 At 8 layers, the baseline model collapses to near-random accuracy (52.7%), clearly demonstrating the barren plateau effect.
 
@@ -889,10 +889,12 @@ The full experiment suite consists of 45 controlled experiments:
 |--------|-------------------|----------------|
 | Baseline 4L | 0.284 | ✅ Healthy |
 | Baseline 6L | 0.276 | ✅ Healthy |
-| Baseline 8L | 0.224 | ⚠️ Degraded (training fails despite non-zero gradients) |
+| Baseline 8L | 0.224 | ⚠️ Degraded — confirms barren plateau onset, motivating the need for mitigation strategies |
 | Layerwise 4L | 0.228 | ✅ Healthy |
+| Layerwise 6L | 0.227 | ✅ Healthy |
 | Layerwise 8L | 0.226 | ✅ Healthy |
 | Local Cost 4L | 0.182 | ✅ Healthy |
+| Local Cost 6L | 0.178 | ✅ Healthy |
 | Local Cost 8L | 0.175 | ✅ Healthy |
 
 ### Depth Impact Analysis
@@ -922,9 +924,9 @@ Accuracy (%)
 
 | Approach | 4-Layer | 6-Layer | 8-Layer |
 |----------|---------|---------|---------|
-| Baseline | 80% (4/5) | 80% (4/5) | **0% (0/5)** ❌ |
-| Layerwise | 60% (3/5) | 80% (4/5) | 60% (3/5) ✅ |
-| Local Cost | 80% (4/5) | 80% (4/5) | 80% (4/5) ✅ |
+| Baseline | 100% (5/5) | 100% (5/5) | **0% (0/5)** ❌ |
+| Layerwise | 100% (5/5) | 100% (5/5) | 100% (5/5) ✅ |
+| Local Cost | 100% (5/5) | 100% (5/5) | 100% (5/5) ✅ |
 
 ### Training Time Analysis
 
@@ -1029,7 +1031,7 @@ This project was developed as part of an academic research initiative on quantum
 
 | Member | Role | Contributions |
 |--------|------|---------------|
-| **Fahad Abdullah** | Project Lead | Architecture design, 8-layer experiments, experiment coordination, quantum circuit implementation |
+| **Fahad Abdullah** | Lead Researcher | Architecture design, 8-layer experiments, experiment coordination, quantum circuit implementation |
 | **Asma Zubair** | Researcher | Data pipeline, 4-layer experiments, validation |
 | **Frahan Riaz** | Researcher | 6-layer experiments, visualization, analysis notebooks, testing |
 
