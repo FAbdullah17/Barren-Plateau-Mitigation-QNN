@@ -1,8 +1,9 @@
 """Data loading and preprocessing utilities for MNIST binary classification.
 
-Developer Assignment (Weeks 1-2):
-    Primary: Fahad Abdullah - Data pipeline & quantum encoding
-    Review: Asma Zubair - Validation framework
+Handles downloading, filtering, downsampling, and encoding of MNIST digit
+images for use in quantum neural network experiments. Supports binary
+classification between any two digit classes with configurable image
+dimensions and dataset sizes.
 """
 
 import os

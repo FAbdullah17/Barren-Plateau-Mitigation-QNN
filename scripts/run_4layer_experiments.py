@@ -2,8 +2,8 @@
 """
 Run all 4-layer experiments (15 total: 3 approaches × 5 seeds).
 
-Week 7 Assignment:
-    - Asma Zubair: All 4-layer experiments
+Executes baseline, layerwise, and local cost training at 4-layer depth
+across all random seeds for statistical validation.
 
 Usage:
     python scripts/run_4layer_experiments.py
@@ -58,7 +58,7 @@ def main():
     total = len(experiments) * len(args.seeds)
     
     print("="*70)
-    print("4-LAYER EXPERIMENTS (Week 7)")
+    print("4-LAYER EXPERIMENTS")
     print("="*70)
     print(f"Approaches: {len(experiments)}")
     print(f"Seeds: {args.seeds}")

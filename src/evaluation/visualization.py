@@ -1,9 +1,9 @@
-"""Visualization utilities for results.
+"""Visualization utilities for training results and cross-approach comparison.
 
-Developer Assignment (Week 10):
-    Primary: Asma Zubair - Accuracy/loss plots (Fig 1, Fig 2)
-    Primary: Fahad Abdullah - Gradient analysis plots (Fig 3)
-    Primary: Frahan Riaz - Success rate comparison (Fig 4)
+Provides plotting functions for training history (loss, accuracy, gradient
+norms, gradient variance), multi-approach comparison bar charts, and
+gradient norm trajectory overlays. All plots use publication-quality
+formatting with Seaborn styling.
 """
 
 import matplotlib.pyplot as plt
@@ -13,7 +13,7 @@ from typing import Dict, List, Optional
 import os
 
 
-# Set style
+# Set publication-quality style defaults
 sns.set_style("whitegrid")
 plt.rcParams['figure.figsize'] = (12, 8)
 plt.rcParams['font.size'] = 10
@@ -25,12 +25,18 @@ def plot_training_history(
     title: str = "Training History"
 ):
     """
-    Plot training and validation metrics.
+    Plot training and validation metrics over epochs.
+    
+    Generates a 2x2 grid showing loss, accuracy, gradient norms (log scale),
+    and gradient variance (log scale). Optionally marks layer transitions
+    for layerwise training experiments.
     
     Args:
-        history: Dictionary containing training history
-        save_path: Path to save figure
-        title: Figure title
+        history: Dictionary containing 'train_loss', 'val_loss', 'train_acc',
+                 'val_acc', 'gradient_norms', 'gradient_variance', and
+                 optionally 'layer_transitions'.
+        save_path: Path to save figure (creates directories if needed).
+        title: Figure title.
     """
     fig, axes = plt.subplots(2, 2, figsize=(15, 10))
     fig.suptitle(title, fontsize=16, fontweight='bold')
@@ -71,7 +77,7 @@ def plot_training_history(
     axes[1, 1].set_title('Gradient Variance (Log Scale)')
     axes[1, 1].grid(True, alpha=0.3)
     
-    # Add layer transitions if available (for layerwise training)
+    # Mark layer transitions for layerwise training
     if 'layer_transitions' in history and history['layer_transitions']:
         for transition in history['layer_transitions']:
             for ax in axes.flat:
@@ -92,11 +98,16 @@ def plot_comparison(
     save_path: Optional[str] = None
 ):
     """
-    Compare metrics across different approaches.
+    Compare metrics across different training approaches.
+    
+    Generates a 1x3 figure showing test accuracy, training time, and
+    mean gradient norm for each approach side by side.
     
     Args:
-        results_dict: Dictionary mapping approach names to results
-        save_path: Path to save figure
+        results_dict: Dictionary mapping approach names to result dictionaries,
+                      each containing 'test_acc', 'training_time', and
+                      'gradient_stats'.
+        save_path: Path to save figure.
     """
     approaches = list(results_dict.keys())
     test_accs = [results_dict[a]['test_acc'] * 100 for a in approaches]
@@ -151,11 +162,16 @@ def plot_gradient_trajectory(
     save_path: Optional[str] = None
 ):
     """
-    Plot gradient norm trajectories for different approaches.
+    Plot gradient norm trajectories for different training approaches.
+    
+    Overlays gradient norm curves on a single log-scale plot to highlight
+    differences in gradient behavior between approaches (e.g., vanishing
+    gradients in baseline vs. maintained gradients in layerwise training).
     
     Args:
-        histories: Dictionary mapping approach names to training histories
-        save_path: Path to save figure
+        histories: Dictionary mapping approach names to training histories,
+                   each containing a 'gradient_norms' list.
+        save_path: Path to save figure.
     """
     plt.figure(figsize=(12, 6))
     
@@ -190,7 +206,7 @@ def plot_gradient_trajectory(
 
 
 if __name__ == "__main__":
-    # Test with dummy data
+    # Verify plotting with synthetic data
     history = {
         'train_loss': np.random.rand(50) * 2,
         'val_loss': np.random.rand(50) * 2,

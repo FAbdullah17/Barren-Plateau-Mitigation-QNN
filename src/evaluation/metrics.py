@@ -1,8 +1,9 @@
-"""Metrics and evaluation utilities.
+"""Metrics and evaluation utilities for quantum neural network training.
 
-Developer Assignment (Weeks 1-2):
-    Primary: Asma Zubair - Gradient tracking & validation metrics
-    Support: Fahad Abdullah - Gradient analysis tools
+Provides gradient tracking, barren plateau detection, accuracy computation,
+and cross-approach comparison tools. The GradientTracker class monitors
+gradient norms throughout training and detects vanishing gradients indicative
+of barren plateaus.
 """
 
 import numpy as np

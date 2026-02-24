@@ -1,8 +1,12 @@
 """Quantum Neural Network model implementation.
 
-Developer Assignment (Weeks 1-2):
-    Primary: Fahad Abdullah - Model architecture & TFQ integration
-    Review: Asma Zubair - Layerwise model structure
+Provides TensorFlow Keras-compatible QNN models for binary classification
+using parameterized quantum circuits (PQCs). Includes both standard
+end-to-end training (QuantumNeuralNetwork) and incremental layerwise
+training (LayerwiseQNN) architectures.
+
+References:
+    - Layerwise training: Skolik et al., Quantum Machine Intelligence 3(5) (2021)
 """
 
 import os

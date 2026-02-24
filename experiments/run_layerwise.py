@@ -1,14 +1,12 @@
 """
 Layerwise Experiment: Incremental Layer-by-Layer Training
-Implements Skolik et al. (2020) methodology.
 
-Developer Assignment:
-    Implementation (Weeks 3-4): Asma Zubair
-    Testing (Weeks 5-6): All team members
-    Experiments (Weeks 7-9):
-        - Asma Zubair: 4-layer layerwise (Week 7, 5 seeds)
-        - Frahan Riaz: 6-layer layerwise (Week 8, 5 seeds)
-        - Fahad Abdullah: 8-layer layerwise (Week 9, 5 seeds) [KEY FINDING]
+Runs a single layerwise training experiment following the methodology of
+Skolik et al. (2020). Layers are added progressively with previously trained
+parameters frozen, mitigating barren plateaus in deep quantum circuits.
+
+Usage:
+    python experiments/run_layerwise.py configs/layerwise_4layer.yaml --seed 42
 """
 
 import sys

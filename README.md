@@ -3,7 +3,7 @@
 **Empirical Comparison of Layerwise Training and Local Cost Functions**
 
 [![Python 3.10](https://img.shields.io/badge/python-3.10-blue.svg)](https://www.python.org/downloads/release/python-3100/)
-[![TensorFlow Quantum](https://img.shields.io/badge/TFQ-0.7.3-orange.svg)](https://www.tensorflow.org/quantum)
+[![TensorFlow Quantum](https://img.shields.io/badge/TFQ-0.7.2-orange.svg)](https://www.tensorflow.org/quantum)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ## Overview

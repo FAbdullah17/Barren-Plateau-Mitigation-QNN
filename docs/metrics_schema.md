@@ -28,9 +28,12 @@ The `gradient_stats` object contains:
 | Field | Type | Description |
 |-------|------|-------------|
 | `mean_norm` | float | Mean gradient norm across training |
+| `std_norm` | float | Standard deviation of gradient norms |
 | `variance` | float | Variance of gradient norms |
 | `min_norm` | float | Minimum gradient norm observed |
 | `max_norm` | float | Maximum gradient norm observed |
+| `median_norm` | float | Median gradient norm observed |
+| `total_updates` | float | Total number of gradient updates |
 
 ## Training History
 
@@ -50,29 +53,37 @@ The `history` object contains arrays with one value per epoch:
 ```json
 {
   "config": {
-    "experiment": {"name": "baseline", "approach": "baseline"},
+    "experiment": {"name": "baseline_4layer", "approach": "baseline"},
     "model": {"n_qubits": 4, "n_layers": 4},
+    "training": {"optimizer": "adam", "learning_rate": 0.01, "batch_size": 20, "epochs": 50},
+    "data": {"dataset": "mnist", "digit1": 3, "digit2": 6, "train_size": 1000, "test_size": 200},
     ...
   },
   "seed": 42,
-  "final_train_loss": 0.5516,
-  "final_train_acc": 0.728,
+  "final_train_loss": 0.5507,
+  "final_train_acc": 0.730,
   "final_val_loss": 0.5176,
-  "final_val_acc": 0.765,
+  "final_val_acc": 0.760,
   "test_loss": 0.5176,
-  "test_acc": 0.765,
-  "training_time": 637.88,
+  "test_acc": 0.760,
+  "training_time": 1583.03,
   "gradient_stats": {
-    "mean_norm": 0.279,
-    "variance": 0.0012,
-    "min_norm": 0.168,
-    "max_norm": 0.330
+    "mean_norm": 0.2843,
+    "std_norm": 0.1802,
+    "variance": 0.0325,
+    "min_norm": 0.0122,
+    "max_norm": 1.1493,
+    "median_norm": 0.2500,
+    "total_updates": 2500.0
   },
   "barren_plateau_detected": false,
   "history": {
-    "train_loss": [0.622, 0.567, ...],
+    "train_loss": [0.596, 0.565, ...],
     "train_acc": [0.634, 0.720, ...],
-    ...
+    "val_loss": [0.570, 0.540, ...],
+    "val_acc": [0.680, 0.730, ...],
+    "gradient_norms": [0.45, 0.38, ...],
+    "gradient_variance": [0.08, 0.05, ...]
   }
 }
 ```
@@ -80,7 +91,7 @@ The `history` object contains arrays with one value per epoch:
 ## Barren Plateau Detection
 
 A barren plateau is detected when:
-- Mean gradient norm < 1e-6
-- Gradient variance is very small
+- Mean gradient norm < 1e-6 (configurable via `barren_plateau_threshold` in config)
+- This indicates the optimization landscape is flat and training is ineffective
 
-This indicates the optimization landscape is flat and training is ineffective.
+> **Note:** Even when `barren_plateau_detected` is `false`, training may still fail to converge at deeper circuit depths (e.g., 8 layers). The 1e-6 threshold detects severe gradient vanishing; moderate gradient degradation may still cause training stagnation without triggering this flag.

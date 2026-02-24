@@ -1,14 +1,12 @@
 """
 Local Cost Experiment: Training with Per-Qubit Measurements
-Implements Cerezo et al. (2021) local cost function approach.
 
-Developer Assignment:
-    Implementation (Weeks 3-4): Frahan Riaz
-    Testing (Weeks 5-6): All team members
-    Experiments (Weeks 7-9):
-        - Asma Zubair: 4-layer local cost (Week 7, 5 seeds)
-        - Frahan Riaz: 6-layer local cost (Week 8, 5 seeds)
-        - Fahad Abdullah: 8-layer local cost (Week 9, 5 seeds)
+Runs a single local cost function experiment adapting the theoretical framework
+of Cerezo et al. (2021). Uses averaged per-qubit Pauli-Z measurements instead
+of a global cost function to maintain polynomial gradient scaling.
+
+Usage:
+    python experiments/run_local_cost.py configs/local_cost_4layer.yaml --seed 42
 """
 
 import sys

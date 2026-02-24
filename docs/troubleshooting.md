@@ -85,7 +85,7 @@ PermissionError: [Errno 13] Permission denied
 ### Results Not Saving
 **Check:**
 1. Results directory exists and is writable
-2. Disk has sufficient space (run `python scripts/check_system.py`)
+2. Disk has sufficient space
 3. Path in config is correct
 
 ---
@@ -190,9 +190,8 @@ If you encounter an issue not covered here:
 
 1. **Check the error message carefully** - it often contains the solution
 2. **Run validation scripts**: `python scripts/validate_results.py results/`
-3. **Check system status**: `python scripts/check_system.py`
-4. **Review recent changes** - did something break after a code update?
+3. **Review recent changes** - did something break after a code update?
 
 ---
 
-**Last Updated:** January 2026
+**Last Updated:** February 2026

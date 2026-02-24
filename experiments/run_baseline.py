@@ -1,14 +1,12 @@
 """
 Baseline Experiment: Standard End-to-End Training
-Demonstrates barren plateau problem in standard QNN training.
 
-Developer Assignment:
-    Implementation (Weeks 3-4): Fahad Abdullah
-    Testing (Weeks 5-6): All team members
-    Experiments (Weeks 7-9):
-        - Asma Zubair: 4-layer baseline (Week 7, 5 seeds)
-        - Frahan Riaz: 6-layer baseline (Week 8, 5 seeds)
-        - Fahad Abdullah: 8-layer baseline (Week 9, 5 seeds) [CRITICAL RESULT]
+Runs a single baseline training experiment with the full parameterized quantum
+circuit optimized simultaneously. This approach serves as the control condition
+to quantify barren plateau severity across circuit depths (4, 6, 8 layers).
+
+Usage:
+    python experiments/run_baseline.py configs/baseline_4layer.yaml --seed 42
 """
 
 import sys

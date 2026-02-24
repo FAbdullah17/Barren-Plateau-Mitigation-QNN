@@ -1,9 +1,12 @@
-"""Layerwise training implementation (Skolik et al., 2020)
+"""Layerwise training implementation following Skolik et al. (2020).
 
-Developer Assignment (Weeks 3-4):
-    Primary: Asma Zubair - Layerwise approach implementation
-    Testing: All team members (Weeks 5-6)
-    Experiments: Asma (4L Week 7), Frahan (6L Week 8), Fahad (8L Week 9)
+Implements incremental layer-by-layer training for parameterized quantum
+circuits. New layers are added progressively and trained while previously
+trained layers remain frozen, mitigating the barren plateau problem by
+limiting the number of simultaneously optimized parameters.
+
+References:
+    - Skolik et al., Quantum Machine Intelligence 3(5) (2021)
 """
 
 import sys

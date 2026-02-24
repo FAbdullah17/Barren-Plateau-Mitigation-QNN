@@ -2,11 +2,10 @@
 """
 Run all 8-layer experiments (15 total: 3 approaches × 5 seeds).
 
-Week 9 Assignment:
-    - Fahad Abdullah: All 8-layer experiments [CRITICAL RESULT]
-
-NOTE: 8-layer experiments are critical for demonstrating the barren plateau
-phenomenon. Baseline is expected to struggle while layerwise should succeed.
+Executes baseline, layerwise, and local cost training at 8-layer depth
+across all random seeds. The 8-layer depth is critical for demonstrating
+barren plateau severity — baseline training is expected to stagnate while
+mitigation strategies (layerwise, local cost) should maintain trainability.
 
 Usage:
     python scripts/run_8layer_experiments.py
@@ -61,7 +60,7 @@ def main():
     total = len(experiments) * len(args.seeds)
     
     print("="*70)
-    print("8-LAYER EXPERIMENTS (Week 9) - CRITICAL RESULTS")
+    print("8-LAYER EXPERIMENTS")
     print("="*70)
     print(f"Approaches: {len(experiments)}")
     print(f"Seeds: {args.seeds}")

@@ -2,8 +2,8 @@
 """
 Run all 6-layer experiments (15 total: 3 approaches × 5 seeds).
 
-Week 8 Assignment:
-    - Frahan Riaz: All 6-layer experiments
+Executes baseline, layerwise, and local cost training at 6-layer depth
+across all random seeds for statistical validation.
 
 Usage:
     python scripts/run_6layer_experiments.py
@@ -58,7 +58,7 @@ def main():
     total = len(experiments) * len(args.seeds)
     
     print("="*70)
-    print("6-LAYER EXPERIMENTS (Week 8)")
+    print("6-LAYER EXPERIMENTS")
     print("="*70)
     print(f"Approaches: {len(experiments)}")
     print(f"Seeds: {args.seeds}")

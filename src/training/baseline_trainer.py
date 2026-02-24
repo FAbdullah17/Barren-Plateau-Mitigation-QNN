@@ -1,9 +1,9 @@
-"""Baseline training implementation (standard end-to-end).
+"""Baseline training implementation using standard end-to-end optimization.
 
-Developer Assignment (Weeks 3-4):
-    Primary: Fahad Abdullah - Baseline approach implementation
-    Testing: All team members (Weeks 5-6)
-    Experiments: Asma (4L Week 7), Frahan (6L Week 8), Fahad (8L Week 9)
+Trains the full parameterized quantum circuit simultaneously using gradient
+descent. Serves as the control condition to demonstrate the barren plateau
+problem, against which layerwise training and local cost function approaches
+are compared.
 """
 
 import sys
