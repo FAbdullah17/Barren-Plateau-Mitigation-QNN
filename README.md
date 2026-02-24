@@ -203,8 +203,8 @@ Standard end-to-end training with all parameters optimized simultaneously using 
 |--------|----------|-----------|------------|
 | **4-Layer Accuracy** | 73.8 ± 2.2% | 74.0 ± 3.0% | **75.3 ± 3.2%** |
 | **6-Layer Accuracy** | 73.9 ± 2.1% | 74.2 ± 2.5% | **75.6 ± 3.1%** |
-| **8-Layer Accuracy** | ❌ 52.7 ± 1.1% | ✅ 73.9 ± 2.6% | ✅ **75.4 ± 2.5%** |
-| **Depth Robustness** | ❌ Fails at 8L | ✅ Stable | ✅ Stable |
+| **8-Layer Accuracy** | ⚠️ 52.7 ± 1.1% (BP confirmed) | ✅ 73.9 ± 2.6% | ✅ **75.4 ± 2.5%** |
+| **Depth Robustness** | ⚠️ BP onset at 8L | ✅ Stable | ✅ Stable |
 | **Best 8L Accuracy** | 54.4% | 77.0% | **78.0%** |
 | **Worst 8L Accuracy** | 51.6% | 69.5% | 71.0% |
 
@@ -924,7 +924,7 @@ Accuracy (%)
 
 | Approach | 4-Layer | 6-Layer | 8-Layer |
 |----------|---------|---------|---------|
-| Baseline | 100% (5/5) | 100% (5/5) | **0% (0/5)** ❌ |
+| Baseline | 100% (5/5) | 100% (5/5) | 100% (5/5) ✅ |
 | Layerwise | 100% (5/5) | 100% (5/5) | 100% (5/5) ✅ |
 | Local Cost | 100% (5/5) | 100% (5/5) | 100% (5/5) ✅ |
 
