@@ -2,7 +2,7 @@
 # Standard end-to-end training with local (per-qubit) cost function
 # Fixed at 4 layers to compare against baseline with same architecture
 #
-# ASSIGNED TO: Asma Zubair (Week 7 - 5 runs)
+#
 
 experiment:
   name: "local_cost"

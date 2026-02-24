@@ -50,7 +50,7 @@ optimizer = Adam(learning_rate)
 for epoch in range(epochs):
     for batch in data_loader:
         predictions = model(batch.X)
-        loss = mse_loss(predictions, batch.y)
+        loss = binary_crossentropy(predictions, batch.y)
         gradients = compute_gradients(loss, model.parameters)
         optimizer.apply_gradients(gradients)
 ```
@@ -140,11 +140,11 @@ where $\hat{O}_i = Z_i$ measures qubit $i$ individually.
 
 ### Implementation
 ```python
-# Global cost (default)
+# Global cost (default) — single Pauli-Z on first qubit
 model = QuantumNeuralNetwork(n_qubits=4, local_cost=False)
-readout_ops = [cirq.Z(q0) * cirq.Z(q1) * cirq.Z(q2) * cirq.Z(q3)]
+readout_ops = [cirq.Z(q0)]
 
-# Local cost
+# Local cost — independent Pauli-Z on each qubit
 model = QuantumNeuralNetwork(n_qubits=4, local_cost=True)
 readout_ops = [cirq.Z(q0), cirq.Z(q1), cirq.Z(q2), cirq.Z(q3)]
 ```
@@ -202,9 +202,9 @@ q3 --------⊕-●
 ### MNIST Binary Classification
 - **Task**: Classify digits 3 vs 6
 - **Original size**: 28×28 = 784 pixels
-- **Downsampling**: 4×4 = 16 pixels (via average pooling)
-- **Normalization**: [0, 1] range
-- **Encoding**: Amplitude encoding via RY rotations
+- **Downsampling**: 4×4 = 16 pixels (via bilinear interpolation)
+- **Normalization**: [0, 1] range (min-max normalization)
+- **Encoding**: Angle encoding via RY rotations: `RY(x_i × π)`
 
 ### Quantum Encoding
 Classical data $x \in \mathbb{R}^{16}$ encoded as:
@@ -218,9 +218,9 @@ where $U_{\text{enc}}(x) = \prod_{i=1}^{4} RY(\arcsin(x_i))$
 ## Training Procedure
 
 ### Loss Function
-Mean Squared Error (MSE):
+Binary Cross-Entropy (BCE):
 
-$$L(\theta) = \frac{1}{N} \sum_{i=1}^{N} (y_i - \hat{y}_i(\theta))^2$$
+$$L(\theta) = -\frac{1}{N} \sum_{i=1}^{N} \left[ y_i \log(\hat{y}_i) + (1 - y_i) \log(1 - \hat{y}_i) \right]$$
 
 ### Optimizer
 Adam optimizer with:
@@ -310,7 +310,7 @@ Percentage of runs achieving ≥90% test accuracy.
 ### Version Control
 - Python: 3.10
 - TensorFlow: 2.15.0
-- TensorFlow Quantum: 0.7.3
+- TensorFlow Quantum: 0.7.2
 - Cirq: 1.3.0
 
 ### Hardware Requirements

@@ -1,14 +1,12 @@
 """
 Local Cost Experiment: Training with Per-Qubit Measurements
-Implements Cerezo et al. (2021) local cost function approach.
 
-Developer Assignment:
-    Implementation (Weeks 3-4): Frahan Riaz
-    Testing (Weeks 5-6): All team members
-    Experiments (Weeks 7-9):
-        - Asma Zubair: 4-layer local cost (Week 7, 5 seeds)
-        - Frahan Riaz: 6-layer local cost (Week 8, 5 seeds)
-        - Fahad Abdullah: 8-layer local cost (Week 9, 5 seeds)
+Runs a single local cost function experiment adapting the theoretical framework
+of Cerezo et al. (2021). Uses averaged per-qubit Pauli-Z measurements instead
+of a global cost function to maintain polynomial gradient scaling.
+
+Usage:
+    python experiments/run_local_cost.py configs/local_cost_4layer.yaml --seed 42
 """
 
 import sys
@@ -17,6 +15,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import yaml
 import json
+import argparse
 import tensorflow_quantum as tfq
 import cirq
 import numpy as np
@@ -27,10 +26,30 @@ from src.training import BaselineTrainer
 from src.evaluation import plot_training_history
 
 
-def load_config(config_path: str = "configs/local_cost.yaml"):
+def load_config(config_path: str):
     """Load configuration from YAML file."""
     with open(config_path, 'r') as f:
-        return yaml.safe_load(f)
+        config = yaml.safe_load(f)
+    
+    # Flatten nested config structure for easier access
+    flat_config = {
+        'experiment_name': config['experiment']['name'],
+        'approach': config['experiment']['approach'],
+        'n_qubits': config['model']['n_qubits'],
+        'n_layers': config['model']['n_layers'],
+        'learning_rate': config['training']['learning_rate'],
+        'batch_size': config['training']['batch_size'],
+        'epochs': config['training']['epochs'],
+        'local_cost': config['training']['local_cost'],
+        'digit1': config['data']['digit1'],
+        'digit2': config['data']['digit2'],
+        'train_size': config['data']['train_size'],
+        'test_size': config['data']['test_size'],
+        'image_size': config['data']['image_size'],
+        'results_dir': config['output']['results_dir'],
+        'random_seeds': config['random_seeds']
+    }
+    return flat_config, config  # Return both flat and original
 
 
 def convert_to_circuits(data: np.ndarray, n_qubits: int = 4):
@@ -51,15 +70,28 @@ def convert_to_circuits(data: np.ndarray, n_qubits: int = 4):
 
 def main():
     """Run local cost experiment."""
+    parser = argparse.ArgumentParser(description='Run local cost QNN experiment')
+    parser.add_argument('config', type=str, help='Path to config YAML file')
+    parser.add_argument('--seed', type=int, default=None, help='Random seed (overrides config)')
+    args = parser.parse_args()
+    
     print("="*70)
     print("LOCAL COST EXPERIMENT: Training with Per-Qubit Measurements")
     print("="*70)
     
     # Load configuration
-    config = load_config()
-    print("\nConfiguration:")
-    for key, value in config.items():
-        print(f"  {key}: {value}")
+    config, full_config = load_config(args.config)
+    
+    # Use provided seed or first seed from config
+    seed = args.seed if args.seed is not None else config['random_seeds'][0]
+    
+    print(f"\nConfiguration: {args.config}")
+    print(f"  Layers: {config['n_layers']}")
+    print(f"  Epochs: {config['epochs']}")
+    print(f"  Learning Rate: {config['learning_rate']}")
+    print(f"  Batch Size: {config['batch_size']}")
+    print(f"  Local Cost: {config['local_cost']}")
+    print(f"  Random Seed: {seed}")
     
     # Load and prepare data
     print("\nLoading MNIST data...")
@@ -69,7 +101,7 @@ def main():
         train_size=config['train_size'],
         test_size=config['test_size'],
         image_size=tuple(config['image_size']),
-        seed=config['seed']
+        seed=seed
     )
     print(f"Training samples: {len(X_train)}")
     print(f"Test samples: {len(X_test)}")
@@ -87,7 +119,7 @@ def main():
         learning_rate=config['learning_rate'],
         batch_size=config['batch_size'],
         local_cost=True,  # KEY DIFFERENCE
-        seed=config['seed']
+        seed=seed
     )
     
     # Train model
@@ -100,35 +132,38 @@ def main():
         epochs=config['epochs']
     )
     
-    # Save results
-    results_dir = Path("results/local_cost")
+    # Create results directory with depth/seed structure
+    results_dir = Path(config['results_dir']) / f"seed_{seed}"
     results_dir.mkdir(parents=True, exist_ok=True)
     
     # Save metrics
-    metrics_path = results_dir / f"local_cost_L{config['n_layers']}_metrics.json"
+    metrics_path = results_dir / "metrics.json"
+    save_results = {
+        'config': full_config,  # Save full config
+        'seed': int(seed),
+        'final_train_loss': float(results['final_train_loss']),
+        'final_train_acc': float(results['final_train_acc']),
+        'final_val_loss': float(results['final_val_loss']),
+        'final_val_acc': float(results['final_val_acc']),
+        'test_loss': float(results['test_loss']),
+        'test_acc': float(results['test_acc']),
+        'training_time': float(results['training_time']),
+        'gradient_stats': {k: float(v) for k, v in results['gradient_stats'].items()},
+        'barren_plateau_detected': bool(results['barren_plateau_detected']),
+        'history': {k: [float(v) for v in vals] for k, vals in results['history'].items()}
+    }
     with open(metrics_path, 'w') as f:
-        save_results = {
-            'config': config,
-            'final_train_loss': float(results['final_train_loss']),
-            'final_train_acc': float(results['final_train_acc']),
-            'final_val_loss': float(results['final_val_loss']),
-            'final_val_acc': float(results['final_val_acc']),
-            'test_loss': float(results['test_loss']),
-            'test_acc': float(results['test_acc']),
-            'training_time': float(results['training_time']),
-            'gradient_stats': results['gradient_stats'],
-            'barren_plateau_detected': results['barren_plateau_detected']
-        }
         json.dump(save_results, f, indent=2)
     print(f"\nMetrics saved to {metrics_path}")
     
     # Plot and save training history
-    plot_path = results_dir / f"local_cost_L{config['n_layers']}_history.png"
+    plot_path = results_dir / "training_history.png"
     plot_training_history(
         results['history'],
         save_path=str(plot_path),
-        title=f"Local Cost Training - {config['n_layers']} Layers"
+        title=f"Local Cost Training - {config['n_layers']} Layers (Seed {seed})"
     )
+    print(f"Plot saved to {plot_path}")
     
     # Print summary
     print("\n" + "="*70)

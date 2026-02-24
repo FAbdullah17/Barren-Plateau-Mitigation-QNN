@@ -1,16 +1,29 @@
 """Quantum Neural Network model implementation.
 
-Developer Assignment (Weeks 1-2):
-    Primary: Fahad Abdullah - Model architecture & TFQ integration
-    Review: Asma Zubair - Layerwise model structure
+Provides TensorFlow Keras-compatible QNN models for binary classification
+using parameterized quantum circuits (PQCs). Includes both standard
+end-to-end training (QuantumNeuralNetwork) and incremental layerwise
+training (LayerwiseQNN) architectures.
+
+References:
+    - Layerwise training: Skolik et al., Quantum Machine Intelligence 3(5) (2021)
 """
+
+import os
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 import tensorflow as tf
 import tensorflow_quantum as tfq
 import cirq
 import numpy as np
 from typing import Optional, List
-from .quantum_circuit import QuantumCircuit, create_readout_operators
+import sys
+from pathlib import Path
+
+# Add parent directory to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
+from models.quantum_circuit import QuantumCircuit, create_readout_operators
 
 
 class QuantumNeuralNetwork(tf.keras.Model):

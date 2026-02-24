@@ -1,10 +1,18 @@
-"""Baseline training implementation (standard end-to-end).
+"""Baseline training implementation using standard end-to-end optimization.
 
-Developer Assignment (Weeks 3-4):
-    Primary: Fahad Abdullah - Baseline approach implementation
-    Testing: All team members (Weeks 5-6)
-    Experiments: Asma (4L Week 7), Frahan (6L Week 8), Fahad (8L Week 9)
+Trains the full parameterized quantum circuit simultaneously using gradient
+descent. Serves as the control condition to demonstrate the barren plateau
+problem, against which layerwise training and local cost function approaches
+are compared.
 """
+
+import sys
+from pathlib import Path
+
+# Add project root to Python path
+project_root = Path(__file__).parent.parent.parent
+if str(project_root) not in sys.path:
+    sys.path.insert(0, str(project_root))
 
 import tensorflow as tf
 import tensorflow_quantum as tfq
@@ -13,8 +21,8 @@ from typing import Dict, List, Optional, Tuple
 import time
 from tqdm import tqdm
 
-from ..models import QuantumNeuralNetwork
-from ..evaluation.metrics import GradientTracker
+from src.models import QuantumNeuralNetwork
+from src.evaluation.metrics import GradientTracker
 
 
 class BaselineTrainer:
@@ -118,9 +126,9 @@ class BaselineTrainer:
                 leave=False
             ):
                 loss, acc, gradients = self._train_step(batch_circuits, batch_labels)
-                epoch_loss.append(loss)
-                epoch_acc.append(acc)
-                epoch_gradients.extend(gradients)
+                epoch_loss.append(loss.numpy())
+                epoch_acc.append(acc.numpy())
+                epoch_gradients.extend([g.numpy() for g in gradients])
             
             # Compute metrics
             train_loss = np.mean(epoch_loss)
@@ -130,8 +138,13 @@ class BaselineTrainer:
             val_loss, val_acc = self._evaluate(val_circuits, val_labels)
             
             # Gradient statistics
-            grad_norm = np.mean([np.linalg.norm(g) for g in epoch_gradients])
-            grad_var = np.var([np.linalg.norm(g) for g in epoch_gradients])
+            valid_gradients = [g for g in epoch_gradients if g is not None]
+            if valid_gradients:
+                grad_norm = np.mean([np.linalg.norm(g) for g in valid_gradients])
+                grad_var = np.var([np.linalg.norm(g) for g in valid_gradients])
+            else:
+                grad_norm = 0.0
+                grad_var = 0.0
             
             # Track gradients
             self.gradient_tracker.update(epoch_gradients)
@@ -174,11 +187,14 @@ class BaselineTrainer:
         
         return results
     
-    @tf.function
+    # Note: @tf.function removed for quantum circuit compatibility
+    # TFQ already uses graph compilation internally
     def _train_step(self, circuits, labels):
         """Single training step."""
         with tf.GradientTape() as tape:
             predictions = self.model(circuits, training=True)
+            # Squeeze predictions to match labels shape (batch,)
+            predictions = tf.squeeze(predictions, axis=-1)
             loss = self.loss_fn(labels, predictions)
         
         gradients = tape.gradient(loss, self.model.trainable_variables)
@@ -189,11 +205,14 @@ class BaselineTrainer:
         labels_int = tf.cast(labels, tf.int32)
         accuracy = tf.reduce_mean(tf.cast(tf.equal(predictions_binary, labels_int), tf.float32))
         
-        return loss.numpy(), accuracy.numpy(), [g.numpy() for g in gradients]
+        # Return TensorFlow tensors (not numpy), let caller convert if needed
+        return loss, accuracy, gradients
     
     def _evaluate(self, circuits, labels):
         """Evaluate on given data."""
         predictions = self.model(circuits, training=False)
+        # Squeeze predictions to match labels shape (batch,)
+        predictions = tf.squeeze(predictions, axis=-1)
         loss = self.loss_fn(labels, predictions).numpy()
         
         predictions_binary = tf.cast(predictions > 0.5, tf.int32)

@@ -1,7 +1,9 @@
-"""Logging configuration for the project.
+"""Logging configuration for experiment tracking and reproducibility.
 
-Developer Assignment (Weeks 1-2):
-    Primary: Frahan Riaz - Logging & experiment tracking
+Provides structured logging setup with both console and file handlers,
+and an ExperimentLogger context manager for per-experiment log isolation.
+Suppresses noisy third-party loggers (TensorFlow, Cirq, Matplotlib) by
+default to keep experiment output clean.
 """
 
 import logging
@@ -20,20 +22,22 @@ def setup_logging(
     Setup logging configuration for the project.
     
     Args:
-        level: Logging level (default: INFO)
-        log_file: Optional log file name
-        log_dir: Directory for log files (default: "logs")
+        level: Logging level for console output (default: INFO).
+        log_file: Optional log file name. If not provided, a timestamped
+                  default filename is generated.
+        log_dir: Directory for log files (default: "logs").
     """
     # Create logs directory
     log_path = Path(log_dir)
     log_path.mkdir(exist_ok=True)
     
-    # Create formatters
+    # Console formatter (concise)
     console_formatter = logging.Formatter(
         '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         datefmt='%H:%M:%S'
     )
     
+    # File formatter (detailed with source location)
     file_formatter = logging.Formatter(
         '%(asctime)s - %(name)s - %(levelname)s - %(filename)s:%(lineno)d - %(message)s',
         datefmt='%Y-%m-%d %H:%M:%S'
@@ -46,18 +50,18 @@ def setup_logging(
     
     handlers = [console_handler]
     
-    # Setup file handler if log_file specified
+    # Setup file handler
     if log_file:
         if not log_file.endswith('.log'):
             log_file = f"{log_file}.log"
         
         file_path = log_path / log_file
         file_handler = logging.FileHandler(file_path, mode='a')
-        file_handler.setLevel(logging.DEBUG)  # File gets all levels
+        file_handler.setLevel(logging.DEBUG)
         file_handler.setFormatter(file_formatter)
         handlers.append(file_handler)
     else:
-        # Create default log file with timestamp
+        # Default timestamped log file
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
         default_log = log_path / f'qnn_experiment_{timestamp}.log'
         file_handler = logging.FileHandler(default_log, mode='a')
@@ -72,7 +76,7 @@ def setup_logging(
         force=True
     )
     
-    # Suppress noisy loggers
+    # Suppress noisy third-party loggers
     logging.getLogger('tensorflow').setLevel(logging.WARNING)
     logging.getLogger('cirq').setLevel(logging.WARNING)
     logging.getLogger('matplotlib').setLevel(logging.WARNING)
@@ -83,17 +87,20 @@ def get_logger(name: str) -> logging.Logger:
     Get a logger instance with the specified name.
     
     Args:
-        name: Logger name (typically __name__)
+        name: Logger name (typically __name__).
     
     Returns:
-        Logger instance
+        Configured Logger instance.
     """
     return logging.getLogger(name)
 
 
 class ExperimentLogger:
     """
-    Context manager for experiment logging.
+    Context manager for experiment-scoped logging.
+    
+    Creates an isolated log file for each experiment run, capturing all
+    log output with seed and timestamp metadata.
     
     Example:
         with ExperimentLogger('baseline', seed=42) as logger:
@@ -135,5 +142,5 @@ class ExperimentLogger:
         self.logger.info("=" * 60)
 
 
-# Default setup when module is imported
+# Initialize default logging on module import
 setup_logging()

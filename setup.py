@@ -11,16 +11,16 @@ with open("requirements.txt", "r", encoding="utf-8") as fh:
 setup(
     name="hybrid-qnns",
     version="1.0.0",
-    author="Hybrid-QNNs Research Team",
+    author="Barren-Plateau-Mitigation-QNN Research Team",
     author_email="",
     description="A research framework for quantum-classical neural networks and barren plateau analysis",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/FAbdullah17/Hybrid-QNNs",
+    url="https://github.com/FAbdullah17/Barren-Plateau-Mitigation-QNN",
     project_urls={
-        "Bug Tracker": "https://github.com/FAbdullah17/Hybrid-QNNs/issues",
-        "Documentation": "https://github.com/FAbdullah17/Hybrid-QNNs",
-        "Source Code": "https://github.com/FAbdullah17/Hybrid-QNNs",
+        "Bug Tracker": "https://github.com/FAbdullah17/Barren-Plateau-Mitigation-QNN/issues",
+        "Documentation": "https://github.com/FAbdullah17/Barren-Plateau-Mitigation-QNN",
+        "Source Code": "https://github.com/FAbdullah17/Barren-Plateau-Mitigation-QNN",
     },
     packages=find_packages(exclude=["tests", "tests.*", "docs", "docs.*"]),
     classifiers=[
