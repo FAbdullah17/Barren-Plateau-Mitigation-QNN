@@ -2,7 +2,7 @@
 # Standard end-to-end training with global cost function
 # Fixed at 4 layers to establish baseline performance
 #
-# ASSIGNED TO: Asma Zubair (Week 7 - 5 runs)
+#
 
 experiment:
   name: "baseline"

@@ -1,7 +1,7 @@
 # Layerwise Training Approach - 4 Layer Configuration
 # Incremental layer-by-layer training with parameter freezing
 #
-# ASSIGNED TO: Asma Zubair (Week 7 - 5 runs)
+#
 
 experiment:
   name: "layerwise_4layer"

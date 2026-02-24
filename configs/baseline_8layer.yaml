@@ -2,7 +2,7 @@
 # Standard end-to-end training with global cost function
 # Expected to show severe barren plateau / training failure
 #
-# ASSIGNED TO: Fahad Abdullah (Week 9 - 5 runs)
+#
 
 experiment:
   name: "baseline_8layer"

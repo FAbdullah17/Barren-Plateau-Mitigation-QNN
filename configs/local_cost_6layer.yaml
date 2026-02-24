@@ -2,7 +2,7 @@
 # Standard end-to-end training with local cost function
 # Testing polynomial gradient scaling at increased depth
 #
-# ASSIGNED TO: Frahan Riaz (Week 8 - 5 runs)
+#
 
 experiment:
   name: "local_cost_6layer"

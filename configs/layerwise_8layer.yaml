@@ -2,7 +2,7 @@
 # Incremental layer-by-layer training with parameter freezing
 # CRITICAL DEPTH TEST
 #
-# ASSIGNED TO: Fahad Abdullah (Week 9 - 5 runs)
+#
 
 experiment:
   name: "layerwise_8layer"

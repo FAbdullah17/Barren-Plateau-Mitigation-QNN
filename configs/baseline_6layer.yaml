@@ -2,7 +2,7 @@
 # Standard end-to-end training with global cost function
 # Testing gradient degradation at increased depth
 #
-# ASSIGNED TO: Frahan Riaz (Week 8 - 5 runs)
+#
 
 experiment:
   name: "baseline_6layer"

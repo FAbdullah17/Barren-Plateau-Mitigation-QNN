@@ -2,7 +2,7 @@
 # Standard end-to-end training with local cost function
 # Testing polynomial gradient scaling at deep circuit depth
 #
-# ASSIGNED TO: Fahad Abdullah (Week 9 - 5 runs)
+#
 
 experiment:
   name: "local_cost_8layer"

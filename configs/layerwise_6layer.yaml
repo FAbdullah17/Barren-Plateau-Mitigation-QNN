@@ -1,7 +1,7 @@
 # Layerwise Training Approach - 6 Layer Configuration
 # Incremental layer-by-layer training with parameter freezing
 #
-# ASSIGNED TO: Frahan Riaz (Week 8 - 5 runs)
+#
 
 experiment:
   name: "layerwise_6layer"
