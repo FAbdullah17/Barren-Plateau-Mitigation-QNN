@@ -145,8 +145,8 @@ At 8 layers, the baseline model collapses to near-random accuracy (52.7%), clear
 
 **How it works:**
 1. Start with a 1-layer circuit and train it to convergence
-2. Freeze the first layer's parameters
-3. Add a second layer and train only its parameters
+2. Instantiate the full depth and incrementally apply optimization phases
+3. Add deeper layers over epochs to act as a depth-staged curriculum
 4. Repeat until all layers are added
 5. Optionally fine-tune all parameters together
 
@@ -643,7 +643,7 @@ MNIST (28×28) → Filter (digits 3,6) → Downsample (4×4) → Normalize (0-1)
 **Key steps:**
 
 1. **Download & Filter:** Loads MNIST from TensorFlow datasets, filters to binary classification (digits 3 vs 6)
-2. **Downsample:** Reduces 28×28 images to 4×4 using bilinear interpolation, producing 16 features that map to 4 qubits × 4 data points
+2. **Downsample:** Reduces 28×28 images and isolates the first four principal features to map cleanly to the 4 input qubits.
 3. **Normalize:** Scales pixel values to [0, 1] using min-max normalization
 4. **Encode:** Converts each feature $x_i$ to a rotation angle $\theta_i = x_i \times \pi$ for RY gate encoding
 
@@ -823,7 +823,7 @@ The full experiment suite consists of 45 controlled experiments:
 | Batch Size | 20 | Balanced speed vs stability |
 | Epochs | 50 | Sufficient for convergence |
 | Seeds | 42, 123, 456, 789, 101112 | 5 seeds for statistical robustness |
-| Image Size | 4×4 | Maps to 16 features for 4 qubits |
+| Image Size | 4 principal features | Maps directly to the 4-qubit hardware efficient ansatz |
 | Loss Function | Binary Cross-Entropy | Standard for binary classification |
 
 ### Independent Variables
