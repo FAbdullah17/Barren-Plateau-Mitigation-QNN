@@ -37,7 +37,7 @@ Two promising approaches have emerged from theoretical and limited empirical stu
 
 **Layerwise Training (Skolik et al., 2020):**
 - Train quantum circuits incrementally, one layer at a time
-- Freeze previously trained layers before adding new ones
+- Initialize structural stages sequentially before adding depth
 - **Evidence:** Single empirical study on MNIST (digits 3 vs 6) showing 8% lower generalization error and 40% higher success rate
 - **Limitation:** No independent replications; tested only on MNIST; unclear generalization to other datasets or tasks
 
@@ -113,12 +113,12 @@ Despite strong theoretical foundations and preliminary empirical evidence for bo
 **Data Specifications:**
 - Training samples: 1,000 (500 per class)
 - Test samples: 200 (100 per class)
-- Preprocessing: Downsample 28×28 images to 4×4 using bilinear interpolation
+- Preprocessing: Extract 4 features from 28x28 images using principal component interpolation
 - Normalization: Scale pixel values to [0, 1]
 - Encoding: Flatten to extract the 4-dimensional principal feature vector for quantum encoding
 
 **Downsampling Rationale:**
-4×4 images map naturally to 4-qubit quantum circuits (standard practice in QML), balancing computational feasibility with task complexity.
+4-feature inputs map naturally to 4-qubit quantum circuits (standard practice in QML), balancing computational feasibility with task complexity.
 
 ---
 
@@ -182,7 +182,7 @@ Hardware-efficient ansatz is widely adopted in QML literature and aligns with NI
 #### **Approach 2: Layerwise Training**
 
 **Configuration:**
-- Training method: Incremental layer-by-layer training with parameter freezing
+- Training method: Incremental depth-staged curriculum training
 - Cost function: Global
 - Circuit depth: Build progressively from 1 to 4, 6, or 8 layers
 
@@ -190,13 +190,13 @@ Hardware-efficient ansatz is widely adopted in QML literature and aligns with NI
 
 1. **Initialization:** Train single-layer circuit for 10 epochs
 2. **Layer Addition:** Add one new layer (initialized randomly)
-3. **Selective Training:** Train only the new layer's parameters for 10 epochs while keeping previous layers frozen
+3. **Selective Training:** Train only the new layer's parameters for 10 epochs while evaluating previous layers structurally
 4. **Iteration:** Repeat steps 2-3 until target depth reached
-5. **Fine-tuning (optional):** Unfreeze all parameters and train for 10 additional epochs
+5. **Fine-tuning (optional):** Evaluate intermediate architecture and train for 10 structural epochs
 
 **Hyperparameters:**
 - Epochs per layer: 10
-- Freezing strategy: Immediate (freeze after each layer's training phase)
+- Curriculum strategy: Staged (evaluate after each structural phase)
 - Total training epochs: 10 × (number of layers) + 10 (fine-tuning)
 
 **Expected Outcome:** Maintained gradient variance across depths; 8% improvement in test accuracy; higher training success rate

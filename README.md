@@ -637,7 +637,7 @@ output:
 The data pipeline handles the complete flow from raw MNIST images to quantum-ready encoded data:
 
 ```
-MNIST (28×28) → Filter (digits 3,6) → Downsample (4×4) → Normalize (0-1) → Encode (RY gates)
+MNIST (28×28) → Filter (digits 3,6) → Feature Extract (4 dimensions) → Normalize (0-1) → Encode (RY gates)
 ```
 
 **Key steps:**
@@ -655,7 +655,7 @@ X_train, y_train, X_test, y_test = load_mnist_binary(
     train_size=1000, test_size=200,
     image_size=(4, 4), seed=42
 )
-# X_train.shape: (1000, 16) — 4×4 flattened images
+# X_train.shape: (1000, 4) — 4 principal components
 # y_train: {-1, +1} binary labels
 ```
 
@@ -686,7 +686,7 @@ Layer l:
 - CNOT entanglement ladder (nearest-neighbor)
 - Additional RY rotation (parameterized)
 
-**Total parameters per layer:** $3 \times n_{\text{qubits}}$ (3 rotation gates per qubit)
+**Total parameters per layer:** $2 \times n_{\text{qubits}}$ (2 rotation gates per qubit)
 
 **Total parameters for circuit:** $3 \times n_{\text{qubits}} \times n_{\text{layers}}$
 
@@ -729,7 +729,6 @@ Progressive layer-by-layer training following Skolik et al. (2020):
 for depth in range(1, n_layers + 1):
     model = QuantumNeuralNetwork(n_qubits=4, n_layers=depth)
 
-    # Freeze all parameters except the current layer
     for param in model.parameters[:previous_layer_params]:
         param.trainable = False
 
@@ -737,7 +736,6 @@ for depth in range(1, n_layers + 1):
     for epoch in range(epochs_per_layer):
         train_step(model, data)
 
-    # Unfreeze for potential fine-tuning
 ```
 
 #### Local Cost Training
