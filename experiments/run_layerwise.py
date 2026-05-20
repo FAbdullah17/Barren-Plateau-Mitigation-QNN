@@ -3,7 +3,7 @@ Layerwise Experiment: Incremental Layer-by-Layer Training
 
 Runs a single layerwise training experiment following the methodology of
 Skolik et al. (2020). Layers are added progressively with previously trained
-parameters frozen, mitigating barren plateaus in deep quantum circuits.
+parameters structurally staged, mitigating barren plateaus in deep quantum circuits.
 
 Usage:
     python experiments/run_layerwise.py configs/layerwise_4layer.yaml --seed 42
