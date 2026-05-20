@@ -185,8 +185,8 @@ class LayerwiseQNN:
         """Get current model."""
         return self.model
     
-    def freeze_trained_layers(self):
-        """Freeze parameters of already trained layers."""
+    def stage_trained_parameters(self):
+        """Prepare parameters for the next structural depth stage."""
         # This is handled in the training loop by selective parameter updates
         pass
 

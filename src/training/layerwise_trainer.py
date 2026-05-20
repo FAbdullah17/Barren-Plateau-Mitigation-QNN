@@ -2,7 +2,7 @@
 
 Implements incremental layer-by-layer training for parameterized quantum
 circuits. New layers are added progressively and trained while previously
-trained layers remain frozen, mitigating the barren plateau problem by
+trained layers remain structurally staged, mitigating the barren plateau problem by
 limiting the number of simultaneously optimized parameters.
 
 References:
