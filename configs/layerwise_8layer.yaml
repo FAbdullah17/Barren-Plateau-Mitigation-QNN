@@ -1,5 +1,5 @@
 # Layerwise Training Approach - 8 Layer Configuration
-# Incremental layer-by-layer training with parameter freezing
+# Incremental layer-by-layer training with structural depth staging
 # CRITICAL DEPTH TEST
 #
 #
@@ -23,7 +23,7 @@ training:
   finetune_epochs: 10
   cost_function: "global"
   local_cost: false
-  freezing_strategy: "immediate"
+  curriculum_strategy: "immediate"
 
 data:
   dataset: "mnist"

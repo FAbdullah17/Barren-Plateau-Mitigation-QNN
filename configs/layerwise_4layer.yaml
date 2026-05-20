@@ -1,5 +1,5 @@
 # Layerwise Training Approach - 4 Layer Configuration
-# Incremental layer-by-layer training with parameter freezing
+# Incremental layer-by-layer training with structural depth staging
 #
 #
 
@@ -22,7 +22,7 @@ training:
   finetune_epochs: 10
   cost_function: "global"
   local_cost: false
-  freezing_strategy: "immediate"  # Freeze after each layer trained
+  curriculum_strategy: "immediate"  # Stage curriculum incrementally
 
 data:
   dataset: "mnist"
@@ -56,7 +56,7 @@ output:
 
 # Training schedule:
 # Epochs 1-10: Train layer 1 only
-# Epochs 11-20: Train layer 2 only (layer 1 frozen)
-# Epochs 21-30: Train layer 3 only (layers 1-2 frozen)
-# Epochs 31-40: Train layer 4 only (layers 1-3 frozen)
-# Epochs 41-50: Fine-tune all layers (unfreeze all)
+# Epochs 11-20: Train layer 2 only (former stages maintained)
+# Epochs 21-30: Train layer 3 only (former stages maintained)
+# Epochs 31-40: Train layer 4 only (former stages maintained)
+# Epochs 41-50: Evaluate final architecture

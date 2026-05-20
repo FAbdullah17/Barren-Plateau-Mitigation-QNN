@@ -20,7 +20,7 @@ training:
   finetune_epochs: 10   # + 10 finetune = 50 total epochs (same as baseline)
   cost_function: "global"
   local_cost: false
-  freezing_strategy: "immediate"
+  curriculum_strategy: "immediate"
 
 data:
   dataset: "mnist"
@@ -54,5 +54,5 @@ output:
 
 # Training schedule (for 2 layers):
 # Epochs 1: Train layer 1 only
-# Epochs 2: Train layer 2 only (layer 1 frozen)
+# Epochs 2: Train layer 2 only (former stages maintained)
 # Epochs 3: Fine-tune all layers
