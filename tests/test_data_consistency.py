@@ -97,12 +97,12 @@ def test_data_shape():
     )
     
     # Check shapes
-    assert X_train.shape == (100, 16), f"Train shape {X_train.shape} != (100, 16)"
-    assert X_test.shape == (50, 16), f"Test shape {X_test.shape} != (50, 16)"
+    assert X_train.shape == (100, 4), f"Train shape {X_train.shape} != (100, 4)"
+    assert X_test.shape == (50, 4), f"Test shape {X_test.shape} != (50, 4)"
     assert y_train.shape == (100,), f"Train labels shape {y_train.shape} != (100,)"
     assert y_test.shape == (50,), f"Test labels shape {y_test.shape} != (50,)"
     
-    print("✓ Data shapes correct for 4x4 quantum encoding")
+    print("✓ Data shapes correct for 4-feature principal encoding")
 
 
 def test_quantum_circuit_encoding_determinism():

@@ -16,8 +16,8 @@ class TestMNISTLoader:
         )
         
         # Check shapes
-        assert X_train.shape == (100, 16), f"Expected (100, 16), got {X_train.shape}"
-        assert X_test.shape == (20, 16), f"Expected (20, 16), got {X_test.shape}"
+        assert X_train.shape == (100, 4), f"Expected (100, 4), got {X_train.shape}"
+        assert X_test.shape == (20, 4), f"Expected (20, 4), got {X_test.shape}"
         assert y_train.shape == (100,), f"Expected (100,), got {y_train.shape}"
         assert y_test.shape == (20,), f"Expected (20,), got {y_test.shape}"
         
@@ -46,9 +46,9 @@ class TestMNISTLoader:
     
     def test_load_mnist_image_size(self):
         """Test custom image size parameter."""
-        # Default is 4x4 = 16 features
+        # Default is 4 dominant features
         X_train, _, _, _ = load_mnist_binary(train_size=10, test_size=5)
-        assert X_train.shape[1] == 16
+        assert X_train.shape[1] == 4
         
         # Custom 8x8 = 64 features
         X_train_large, _, _, _ = load_mnist_binary(
@@ -87,7 +87,7 @@ class TestEncodeData:
     def test_encode_data_for_qnn_shape(self):
         """Test encoding produces correct shape."""
         # Create sample data
-        X = np.random.rand(10, 16).astype(np.float32)
+        X = np.random.rand(10, 4).astype(np.float32)
         y = np.array([0, 1, 0, 1, 0, 1, 0, 1, 0, 1], dtype=np.int32)
         
         # Encode
@@ -99,7 +99,7 @@ class TestEncodeData:
     
     def test_encode_data_for_qnn_labels(self):
         """Test label encoding to -1/+1."""
-        X = np.random.rand(10, 16).astype(np.float32)
+        X = np.random.rand(10, 4).astype(np.float32)
         y = np.array([0, 1, 0, 1, 0, 1, 0, 1, 0, 1], dtype=np.int32)
         
         _, y_encoded = encode_data_for_qnn(X, y, n_qubits=4)
@@ -110,7 +110,7 @@ class TestEncodeData:
     
     def test_encode_data_mismatch(self):
         """Test error handling for mismatched X and y lengths."""
-        X = np.random.rand(10, 16).astype(np.float32)
+        X = np.random.rand(10, 4).astype(np.float32)
         y = np.array([0, 1, 0, 1, 0], dtype=np.int32)  # Wrong length
         
         with pytest.raises((ValueError, AssertionError)):
@@ -118,7 +118,7 @@ class TestEncodeData:
     
     def test_encode_preserves_data(self):
         """Test that encoding preserves original data integrity."""
-        X = np.random.rand(5, 16).astype(np.float32)
+        X = np.random.rand(5, 4).astype(np.float32)
         y = np.array([0, 1, 0, 1, 0], dtype=np.int32)
         
         X_before = X.copy()
