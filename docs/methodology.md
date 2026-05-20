@@ -73,12 +73,12 @@ for epoch in range(epochs):
 Based on Skolik et al. (2020), train circuits layer-by-layer, adding and optimizing one layer at a time.
 
 ### Algorithm
-1. Start with 1-layer circuit
-2. Train layer 1 for `epochs_per_layer` epochs
-3. **Freeze** layer 1 parameters
-4. Add layer 2, train for `epochs_per_layer` epochs
-5. Repeat until all layers added
-6. **Fine-tune** all layers together for `finetune_epochs` epochs
+1. Instantiate initial partial-depth circuit
+2. Train stage 1 for `epochs_per_layer` epochs
+3. **Initialize** structural depth increase (curriculum stage 2)
+4. Train subsequent stages iteratively
+5. Repeat until all depth layers are added
+6. **Evaluate** final architecture performance
 
 ### Pseudocode
 ```python
@@ -87,22 +87,15 @@ qnn = LayerwiseQNN(n_qubits, total_layers)
 for layer_idx in range(1, total_layers + 1):
     qnn.add_layer()
     
-    # Train only new layer (previous frozen)
+    # Train current curriculum stage
     for epoch in range(epochs_per_layer):
         train_step(qnn, data, optimizer)
-    
-    qnn.freeze_previous_layers()
-
-# Fine-tuning phase
-qnn.unfreeze_all_layers()
-for epoch in range(finetune_epochs):
-    train_step(qnn, data, optimizer)
 ```
 
 ### Key Implementation Details
-- **Freezing**: Set `requires_grad=False` for previous layer parameters
-- **Gradual depth increase**: Avoids deep circuit training initially
-- **Fine-tuning**: Allows cross-layer optimization after layerwise training
+- **Incremental instantiation**: Incrementally exposes added depth
+- **Gradual depth increase**: Avoids deep circuit unstructured initialization initially
+- **Curriculum staging**: Acts as a depth-staged proxy for trainability thresholds
 
 ### Theoretical Justification
 - Shallower circuits during initial training have larger gradients
@@ -202,12 +195,12 @@ q3 --------⊕-●
 ### MNIST Binary Classification
 - **Task**: Classify digits 3 vs 6
 - **Original size**: 28×28 = 784 pixels
-- **Downsampling**: 4×4 = 16 pixels (via bilinear interpolation)
+- **Feature Extraction**: Isolates 4 principal features to map cleanly to qubits
 - **Normalization**: [0, 1] range (min-max normalization)
 - **Encoding**: Angle encoding via RY rotations: `RY(x_i × π)`
 
 ### Quantum Encoding
-Classical data $x \in \mathbb{R}^{16}$ encoded as:
+Classical data $x \in \mathbb{R}^{4}$ encoded as:
 
 $$|\psi(x)\rangle = U_{\text{enc}}(x)|0\rangle^{\otimes 4}$$
 

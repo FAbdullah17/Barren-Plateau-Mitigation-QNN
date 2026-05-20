@@ -318,7 +318,7 @@ Local Cost   | 75.4%    | ±2.5%  ← Slightly better
 **Diagnosis steps**:
 ```python
 # Check data
-assert X_train.shape == (1000, 16)
+assert X_train.shape == (1000, 4)
 assert set(y_train) == {-1, 1}
 
 # Check gradient flow
