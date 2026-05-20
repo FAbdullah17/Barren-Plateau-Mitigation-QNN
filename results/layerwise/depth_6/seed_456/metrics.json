@@ -19,7 +19,7 @@
       "finetune_epochs": 10,
       "cost_function": "global",
       "local_cost": false,
-      "freezing_strategy": "immediate"
+      "curriculum_strategy": "immediate"
     },
     "data": {
       "dataset": "mnist",
