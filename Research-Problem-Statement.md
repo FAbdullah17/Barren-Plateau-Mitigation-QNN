@@ -115,7 +115,7 @@ Despite strong theoretical foundations and preliminary empirical evidence for bo
 - Test samples: 200 (100 per class)
 - Preprocessing: Downsample 28×28 images to 4×4 using bilinear interpolation
 - Normalization: Scale pixel values to [0, 1]
-- Encoding: Flatten to 16-dimensional feature vector for quantum encoding
+- Encoding: Flatten to extract the 4-dimensional principal feature vector for quantum encoding
 
 **Downsampling Rationale:**
 4×4 images map naturally to 4-qubit quantum circuits (standard practice in QML), balancing computational feasibility with task complexity.
@@ -357,7 +357,7 @@ All implementation code will be made publicly available on GitHub for reproducib
 
 ### 8.1 Scientific Impact
 
-- **Closes empirical gap** between theoretical mitigation strategies and practical application
+- **Strengthens empirical foundations** by demonstrating practical application
 - **Validates or refutes** two prominent approaches through rigorous comparison
 - **Establishes benchmark** for future barren plateau mitigation research
 
