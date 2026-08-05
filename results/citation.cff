@@ -1,0 +1,55 @@
+cff-version: 1.0.0
+message: "If you use this research artifact, please cite it using the metadata below."
+
+title: "Barren Plateau Mitigation in Quantum Neural Networks: An Empirical and Artifact-Level Comparison of Layerwise Training and Local Cost Functions"
+
+type: software
+
+authors:
+  - family-names: Abdullah
+    given-names: Fahad
+    affiliation: "Department of Artificial Intelligence, The Islamia University of Bahawalpur, Pakistan"
+    email: "mfa232266@gmail.com"
+
+  - family-names: Riaz
+    given-names: Farhan
+    affiliation: "Department of Artificial Intelligence, The Islamia University of Bahawalpur, Pakistan"
+    email: "farhanriaz0000@gmail.com"
+
+  - family-names: Zubair
+    given-names: Asma
+    affiliation: "Department of Artificial Intelligence, The Islamia University of Bahawalpur, Pakistan"
+    email: "zasma702@gmail.com"
+
+abstract: >
+  This repository accompanies the research manuscript
+  "Barren Plateau Mitigation in Quantum Neural Networks:
+  An Empirical and Artifact-Level Comparison of Layerwise
+  Training and Local Cost Functions." It provides the
+  manuscript, source code, experimental configurations,
+  figures, and reproducibility resources for evaluating
+  layerwise training and local cost function strategies
+  for mitigating barren plateaus in Quantum Neural Networks
+  using TensorFlow Quantum.
+
+keywords:
+  - Quantum Neural Networks
+  - Quantum Machine Learning
+  - Barren Plateaus
+  - Variational Quantum Circuits
+  - TensorFlow Quantum
+  - Layerwise Training
+  - Local Cost Functions
+  - Empirical Benchmarking
+
+license: MIT
+
+repository-code: "https://github.com/FAbdullah17/Barren-Plateau-Mitigation-QNN"
+
+url: "https://github.com/FAbdullah17/Barren-Plateau-Mitigation-QNN"
+
+doi: "10.5281/zenodo.21801422"
+
+version: "1.0.2"
+
+date-released: "2026-08-05"
