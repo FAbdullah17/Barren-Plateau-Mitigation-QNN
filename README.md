@@ -24,12 +24,11 @@
   <a href="https://opensource.org/licenses/MIT">
     <img src="https://img.shields.io/badge/License-MIT-green?style=for-the-badge" alt="License: MIT">
   </a>
-  <a href="https://doi.org/10.5281/zenodo.21801422">
-    <img src="https://zenodo.org/badge/DOI/10.5281/zenodo.21801422.svg" alt="DOI">
+  <a href="https://doi.org/10.5281/zenodo.21818779">
+    <img src="https://zenodo.org/badge/DOI/10.5281/zenodo.21818779.svg" alt="DOI">
   </a>
 </p>
 
----
 
 ## 📋 Table of Contents
 
