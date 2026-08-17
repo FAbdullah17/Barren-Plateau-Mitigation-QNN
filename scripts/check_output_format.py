@@ -15,6 +15,24 @@ from pathlib import Path
 import sys
 
 
+# Required top-level fields of every metrics.json.
+REQUIRED_FIELDS = [
+    'config',
+    'data_seed',
+    'init_seed',
+    'training_seed',
+    'seed_index',
+    'test_acc',
+    'test_loss',
+    'training_time_seconds',
+    'total_updates',
+    'n_parameters',
+    'training_diagnostic',
+    'history',
+    'pca_info',
+]
+
+
 def get_experiment_structure(result_dir: Path) -> dict:
     """Get the file structure of an experiment result directory."""
     result_dir = Path(result_dir)
@@ -22,6 +40,7 @@ def get_experiment_structure(result_dir: Path) -> dict:
     structure = {
         'files': [],
         'metrics_keys': set(),
+        'missing_required_fields': [],
         'has_metrics': False,
         'has_plot': False,
         'has_config': False
@@ -37,7 +56,10 @@ def get_experiment_structure(result_dir: Path) -> dict:
                     metrics = json.load(f)
                 structure['metrics_keys'] = set(metrics.keys())
                 structure['has_config'] = 'config' in metrics
-                
+                structure['missing_required_fields'] = [
+                    f for f in REQUIRED_FIELDS if f not in metrics
+                ]
+            
             if item.suffix == '.png':
                 structure['has_plot'] = True
     
@@ -143,6 +165,11 @@ def main():
                 all_issues.append(f"{approach}: Missing metrics.json")
             if not structure['has_plot']:
                 all_issues.append(f"{approach}: Missing training plot")
+            if structure['missing_required_fields']:
+                all_issues.append(
+                    f"{approach}: metrics.json missing required fields: "
+                    f"{structure['missing_required_fields']}"
+                )
         print()
     
     # Compare schemas across approaches

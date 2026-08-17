@@ -1,13 +1,21 @@
-"""Layerwise training implementation following Skolik et al. (2020).
+"""Step-based layerwise training.
 
-Implements incremental layer-by-layer training for parameterized quantum
-circuits. New layers are added progressively and trained while previously
-trained layers remain frozen, mitigating the barren plateau problem by
-limiting the number of simultaneously optimized parameters.
+Incremental Skolik training: each new ansatz layer is trained with the earlier
+layers baked in as frozen numeric constants (``LayerwiseQNN``), then persisted
+with ``store_current_params``; finally the full ansatz is fine-tuned starting
+exactly from the staged values (``build_finetune_model``).
 
-References:
-    - Skolik et al., Quantum Machine Intelligence 3(5) (2021)
+The trainer consumes exactly ``total_updates`` gradient steps, split as
+``per_stage = total_updates // (n_layers + 1)`` for each staged layer and the
+remainder for fine-tuning — the same total budget as the baseline, so any
+difference is *how* the updates are distributed, not how many. The dataset is
+shuffled once with ``training_seed``; ``init_seed`` (decoupled) drives the
+per-layer parameter initializer.
 """
+
+import os
+os.environ.setdefault('TF_USE_LEGACY_KERAS', '1')  # TFQ requires Keras 2
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 import sys
 from pathlib import Path
@@ -18,263 +26,294 @@ if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
 import tensorflow as tf
-import tensorflow_quantum as tfq
 import numpy as np
-from typing import Dict, Optional
 import time
-from tqdm import tqdm
+from typing import Dict, Optional
 
 from src.models import LayerwiseQNN
 from src.evaluation.metrics import GradientTracker
 
 
+def compute_layerwise_budget(total_updates: int, n_layers: int) -> Dict:
+    """Split ``total_updates`` across staged layers and the fine-tune phase.
+
+    ``per_stage = total_updates // (n_layers + 1)``; fine-tuning receives the
+    remainder. The two entries always sum to ``total_updates``.
+
+    Returns:
+        dict with ``per_stage`` and ``finetune``.
+
+    Raises:
+        ValueError: if either input is invalid or ``total_updates`` is too
+            small for every phase to receive at least one update.
+    """
+    if not isinstance(total_updates, int) or total_updates < 1:
+        raise ValueError(f"total_updates must be a positive integer, got {total_updates}")
+    if not isinstance(n_layers, int) or n_layers < 1:
+        raise ValueError(f"n_layers must be a positive integer, got {n_layers}")
+
+    n_phases = n_layers + 1  # staged layers + fine-tune
+    per_stage = total_updates // n_phases
+    if per_stage < 1:
+        raise ValueError(
+            f"total_updates ({total_updates}) is too small for {n_layers} layers "
+            f"+ fine-tune"
+        )
+    finetune = total_updates - per_stage * n_layers
+    return {'per_stage': int(per_stage), 'finetune': int(finetune)}
+
+
 class LayerwiseTrainer:
-    """Layerwise training for quantum neural networks."""
-    
+    """Incremental Skolik training with a fixed step budget."""
+
     def __init__(
         self,
         n_qubits: int = 4,
-        target_layers: int = 4,
-        learning_rate: float = 1e-4,
+        n_layers: int = 4,
+        cost: str = 'global',
+        learning_rate: float = 0.01,
         batch_size: int = 20,
-        epochs_per_layer: int = 10,
-        finetune_epochs: int = 10,
-        local_cost: bool = False,
-        seed: Optional[int] = None
+        total_updates: int = 2500,
+        log_frequency: int = 10,
+        diagnostic_samples: int = 100,
+        init_seed: Optional[int] = None,
+        training_seed: Optional[int] = None,
+        track_gradients: bool = True,
     ):
         """
-        Initialize layerwise trainer.
-        
+        Initialize the step-based layerwise trainer.
+
         Args:
-            n_qubits: Number of qubits
-            target_layers: Target number of layers
-            learning_rate: Learning rate for Adam optimizer
-            batch_size: Batch size for training
-            epochs_per_layer: Epochs to train each new layer
-            finetune_epochs: Epochs for final fine-tuning
-            local_cost: Use local cost functions
-            seed: Random seed for reproducibility
+            n_qubits: Number of qubits.
+            n_layers: Target number of layers (also used for the budget split).
+            cost: 'global' or 'local' cost function.
+            learning_rate: Adam learning rate.
+            batch_size: Mini-batch size.
+            total_updates: Total gradient steps across all phases.
+            log_frequency: Compute/log the gradient diagnostic every N steps.
+            diagnostic_samples: Fixed training samples for the per-sample
+                Jacobian.
+            init_seed: Base seed for per-layer parameter initialization.
+            training_seed: Dataset shuffle seed (decoupled).
+            track_gradients: Compute the gradient diagnostic when True.
         """
+        if cost not in ('global', 'local'):
+            raise ValueError(f"cost must be 'global' or 'local', got {cost!r}")
+        if log_frequency < 1:
+            raise ValueError(f"log_frequency must be >= 1, got {log_frequency}")
+        if diagnostic_samples < 1:
+            raise ValueError(
+                f"diagnostic_samples must be >= 1, got {diagnostic_samples}"
+            )
+
         self.n_qubits = n_qubits
-        self.target_layers = target_layers
+        self.n_layers = n_layers
+        self.cost = cost
         self.learning_rate = learning_rate
         self.batch_size = batch_size
-        self.epochs_per_layer = epochs_per_layer
-        self.finetune_epochs = finetune_epochs
-        self.local_cost = local_cost
-        self.seed = seed
-        
-        if seed is not None:
-            tf.random.set_seed(seed)
-            np.random.seed(seed)
-        
-        # Initialize layerwise QNN
+        self.total_updates = total_updates
+        self.log_frequency = log_frequency
+        self.diagnostic_samples = diagnostic_samples
+        self.init_seed = init_seed
+        self.training_seed = training_seed
+        self.track_gradients = track_gradients
+
+        self.budget = compute_layerwise_budget(total_updates, n_layers)
+
+        if training_seed is not None:
+            tf.random.set_seed(training_seed)
+            np.random.seed(training_seed)
+
         self.qnn = LayerwiseQNN(
             n_qubits=n_qubits,
-            target_layers=target_layers,
-            local_cost=local_cost
+            target_layers=n_layers,
+            cost=cost,
+            init_seed=init_seed,
         )
-        
-        # Loss function
         self.loss_fn = tf.keras.losses.BinaryCrossentropy()
-        
-        # Gradient tracker
+        self.per_sample_loss = tf.keras.losses.BinaryCrossentropy(
+            reduction=tf.keras.losses.Reduction.NONE
+        )
         self.gradient_tracker = GradientTracker()
-        
-        # History
-        self.history = {
-            'train_loss': [],
-            'train_acc': [],
-            'val_loss': [],
-            'val_acc': [],
-            'gradient_norms': [],
-            'gradient_variance': [],
-            'layer_transitions': []  # Mark when layers are added
-        }
-    
+
+        self._diag_circuits = None
+        self._diag_labels = None
+        self._val_circuits = None
+        self._val_labels = None
+
     def train(
         self,
         train_circuits: tf.Tensor,
         train_labels: np.ndarray,
         val_circuits: tf.Tensor,
-        val_labels: np.ndarray
+        val_labels: np.ndarray,
     ) -> Dict:
         """
-        Train the model layer by layer.
-        
+        Train staged layers then fine-tune, consuming exactly ``total_updates``.
+
         Args:
-            train_circuits: Training quantum circuits
-            train_labels: Training labels
-            val_circuits: Validation quantum circuits
-            val_labels: Validation labels
-            
+            train_circuits: Training quantum circuits.
+            train_labels: Training labels.
+            val_circuits: Validation/test quantum circuits.
+            val_labels: Validation/test labels.
+
         Returns:
-            Dictionary containing training history and metrics
+            Results dict following the metrics schema, including the
+            recorded ``layerwise_budget_split``.
         """
-        print(f"Starting layerwise training for {self.target_layers} layers...")
-        print(f"Epochs per layer: {self.epochs_per_layer}")
-        print(f"Fine-tuning epochs: {self.finetune_epochs}")
-        print(f"Local cost: {self.local_cost}")
-        
+        n_train = len(train_labels)
+        if n_train < 1:
+            raise ValueError("train_labels must not be empty")
+
+        self._val_circuits = val_circuits
+        self._val_labels = val_labels
+        self._diag_circuits = train_circuits[: self.diagnostic_samples]
+        self._diag_labels = train_labels[: self.diagnostic_samples]
+
+        # Shared, once-shuffled dataset; each phase takes its budget from it.
+        train_dataset = tf.data.Dataset.from_tensor_slices(
+            (train_circuits, train_labels)
+        )
+        train_dataset = train_dataset.shuffle(
+            n_train,
+            seed=self.training_seed,
+            reshuffle_each_iteration=False,
+        ).repeat().batch(self.batch_size)
+
+        history = {
+            'step': [],
+            'train_loss': [],
+            'train_acc': [],
+            'val_step': [],
+            'val_loss': [],
+            'val_acc': [],
+        }
+
         start_time = time.time()
-        
-        # Train each layer incrementally
-        for layer_idx in range(self.target_layers):
-            print(f"\n{'='*60}")
-            print(f"Adding and training layer {layer_idx + 1}/{self.target_layers}")
-            print(f"{'='*60}")
-            
-            # Add new layer
+        step = 0
+
+        # Staged phase: one layer at a time, earlier layers baked in and frozen.
+        per_stage = self.budget['per_stage']
+        for _ in range(self.n_layers):
             model = self.qnn.add_layer()
-            
-            # Create optimizer for this layer
             optimizer = tf.keras.optimizers.Adam(learning_rate=self.learning_rate)
-            
-            # Mark layer transition in history
-            self.history['layer_transitions'].append(len(self.history['train_loss']))
-            
-            # Train this layer
-            self._train_layer(
-                model,
-                optimizer,
-                train_circuits,
-                train_labels,
-                val_circuits,
-                val_labels,
-                epochs=self.epochs_per_layer
+            self._run_steps(
+                model, optimizer, train_dataset, per_stage, history, step
             )
-        
-        # Fine-tuning phase: train all layers together
-        if self.finetune_epochs > 0:
-            print(f"\n{'='*60}")
-            print(f"Fine-tuning all {self.target_layers} layers")
-            print(f"{'='*60}")
-            
-            model = self.qnn.get_current_model()
+            step += per_stage
+            self.qnn.store_current_params()
+
+        # Fine-tune phase: full ansatz initialized from the staged values.
+        finetune_updates = self.budget['finetune']
+        if finetune_updates > 0:
+            model = self.qnn.build_finetune_model()
             optimizer = tf.keras.optimizers.Adam(learning_rate=self.learning_rate)
-            
-            self._train_layer(
-                model,
-                optimizer,
-                train_circuits,
-                train_labels,
-                val_circuits,
-                val_labels,
-                epochs=self.finetune_epochs
+            self._run_steps(
+                model, optimizer, train_dataset, finetune_updates, history, step
             )
-        
+            step += finetune_updates
+
         training_time = time.time() - start_time
-        
-        # Final evaluation
+
         model = self.qnn.get_current_model()
         test_loss, test_acc = self._evaluate(model, val_circuits, val_labels)
-        
-        results = {
-            'history': self.history,
-            'final_train_loss': self.history['train_loss'][-1],
-            'final_train_acc': self.history['train_acc'][-1],
-            'final_val_loss': self.history['val_loss'][-1],
-            'final_val_acc': self.history['val_acc'][-1],
-            'test_loss': test_loss,
-            'test_acc': test_acc,
-            'training_time': training_time,
-            'gradient_stats': self.gradient_tracker.get_statistics(),
-            'barren_plateau_detected': self.gradient_tracker.detect_barren_plateau()
+
+        # Runtime-derived parameter count of the final (fine-tune) model.
+        n_parameters = int(np.prod(model.trainable_variables[0].shape))
+        diagnostic = self.gradient_tracker.get_statistics()
+        diagnostic['n_parameters'] = n_parameters
+
+        return {
+            'config': {
+                'approach': 'layerwise',
+                'n_qubits': self.n_qubits,
+                'n_layers': self.n_layers,
+                'cost': self.cost,
+                'learning_rate': self.learning_rate,
+                'batch_size': self.batch_size,
+                'total_updates': self.total_updates,
+                'log_frequency': self.log_frequency,
+                'init_seed': self.init_seed,
+                'training_seed': self.training_seed,
+                'track_gradients': self.track_gradients,
+            },
+            'total_updates': self.total_updates,
+            'layerwise_budget_split': dict(self.budget),
+            'n_parameters': n_parameters,
+            'test_loss': float(test_loss),
+            'test_acc': float(test_acc),
+            'training_time_seconds': training_time,
+            'training_diagnostic': diagnostic,
+            'history': history,
         }
-        
-        print(f"\nLayerwise training completed in {training_time:.2f}s")
-        print(f"Final Test Accuracy: {test_acc:.4f}")
-        print(f"Barren Plateau: {results['barren_plateau_detected']}")
-        
-        return results
-    
-    def _train_layer(
+
+    def _run_steps(
         self,
         model,
         optimizer,
-        train_circuits,
-        train_labels,
-        val_circuits,
-        val_labels,
-        epochs: int
-    ):
-        """Train current layer configuration."""
-        train_dataset = tf.data.Dataset.from_tensor_slices((train_circuits, train_labels))
-        train_dataset = train_dataset.shuffle(len(train_labels)).batch(self.batch_size)
-        
-        for epoch in range(epochs):
-            epoch_loss = []
-            epoch_acc = []
-            epoch_gradients = []
-            
-            # Training loop
-            for batch_circuits, batch_labels in tqdm(
-                train_dataset,
-                desc=f"Epoch {epoch+1}/{epochs}",
-                leave=False
-            ):
-                loss, acc, gradients = self._train_step(
-                    model, optimizer, batch_circuits, batch_labels
+        dataset,
+        n_steps: int,
+        history: Dict,
+        start_step: int,
+    ) -> None:
+        """Run ``n_steps`` gradient steps on ``model``, appending history."""
+        for i, (batch_circuits, batch_labels) in enumerate(dataset.take(n_steps)):
+            loss, acc = self._train_step(model, optimizer, batch_circuits, batch_labels)
+            step = start_step + i
+            history['step'].append(step)
+            history['train_loss'].append(float(loss))
+            history['train_acc'].append(float(acc))
+
+            if (step + 1) % self.log_frequency == 0 or (i + 1) == n_steps:
+                val_loss, val_acc = self._evaluate(
+                    model, self._val_circuits, self._val_labels
                 )
-                epoch_loss.append(loss)
-                epoch_acc.append(acc)
-                epoch_gradients.extend(gradients)
-            
-            # Compute metrics
-            train_loss = np.mean(epoch_loss)
-            train_acc = np.mean(epoch_acc)
-            
-            # Validation
-            val_loss, val_acc = self._evaluate(model, val_circuits, val_labels)
-            
-            # Gradient statistics
-            grad_norm = np.mean([np.linalg.norm(g) for g in epoch_gradients])
-            grad_var = np.var([np.linalg.norm(g) for g in epoch_gradients])
-            
-            # Track gradients
-            self.gradient_tracker.update(epoch_gradients)
-            
-            # Store history
-            self.history['train_loss'].append(train_loss)
-            self.history['train_acc'].append(train_acc)
-            self.history['val_loss'].append(val_loss)
-            self.history['val_acc'].append(val_acc)
-            self.history['gradient_norms'].append(grad_norm)
-            self.history['gradient_variance'].append(grad_var)
-            
-            # Print progress
-            print(f"Epoch {epoch+1}/{epochs} - "
-                  f"Loss: {train_loss:.4f} - Acc: {train_acc:.4f} - "
-                  f"Val Loss: {val_loss:.4f} - Val Acc: {val_acc:.4f} - "
-                  f"Grad Norm: {grad_norm:.6f}")
-    
+                history['val_step'].append(step + 1)
+                history['val_loss'].append(float(val_loss))
+                history['val_acc'].append(float(val_acc))
+                if self.track_gradients:
+                    self._log_diagnostic(model, step + 1)
+
     def _train_step(self, model, optimizer, circuits, labels):
-        """Single training step."""
+        """Single gradient step on ``model``; returns (loss, accuracy) floats."""
         with tf.GradientTape() as tape:
             predictions = model(circuits, training=True)
-            # Squeeze predictions to match labels shape (batch,)
             predictions = tf.squeeze(predictions, axis=-1)
             loss = self.loss_fn(labels, predictions)
-        
+
         gradients = tape.gradient(loss, model.trainable_variables)
         optimizer.apply_gradients(zip(gradients, model.trainable_variables))
-        
-        # Compute accuracy
-        predictions_binary = tf.cast(predictions > 0.5, tf.int32)
-        labels_int = tf.cast(labels, tf.int32)
-        accuracy = tf.reduce_mean(tf.cast(tf.equal(predictions_binary, labels_int), tf.float32))
-        
-        return loss.numpy(), accuracy.numpy(), [g.numpy() for g in gradients]
-    
+        accuracy = self._batch_accuracy(predictions, labels)
+        return float(loss.numpy()), float(accuracy.numpy())
+
+    def _log_diagnostic(self, model, step: int) -> None:
+        """Per-sample Jacobian (B, P) on fixed samples -> gradient tracker.
+
+        The per-sample loss must be computed from ``(B, 1)`` inputs: legacy
+        Keras ``BinaryCrossentropy(reduction=NONE)`` returns per-sample losses
+        only for 2-D inputs. The resulting Jacobian is ``(B, P)``.
+        """
+        labels_2d = tf.cast(self._diag_labels, tf.float32)[:, None]
+        with tf.GradientTape() as tape:
+            predictions = model(self._diag_circuits, training=False)
+            loss_per_sample = self.per_sample_loss(labels_2d, predictions)
+        jacobian = tape.jacobian(loss_per_sample, model.trainable_variables[0])
+        self.gradient_tracker.update(
+            jacobian.numpy(), step=step, samples=self._diag_circuits.shape[0]
+        )
+
     def _evaluate(self, model, circuits, labels):
-        """Evaluate on given data."""
+        """Return (loss, accuracy) on the given data."""
         predictions = model(circuits, training=False)
-        # Squeeze predictions to match labels shape (batch,)
         predictions = tf.squeeze(predictions, axis=-1)
-        loss = self.loss_fn(labels, predictions).numpy()
-        
-        predictions_binary = tf.cast(predictions > 0.5, tf.int32)
+        loss = self.loss_fn(labels, predictions)
+        accuracy = self._batch_accuracy(predictions, labels)
+        return float(loss.numpy()), float(accuracy.numpy())
+
+    @staticmethod
+    def _batch_accuracy(predictions, labels):
+        preds_binary = tf.cast(predictions > 0.5, tf.int32)
         labels_int = tf.cast(labels, tf.int32)
-        accuracy = tf.reduce_mean(tf.cast(tf.equal(predictions_binary, labels_int), tf.float32)).numpy()
-        
-        return loss, accuracy
+        return tf.reduce_mean(
+            tf.cast(tf.equal(preds_binary, labels_int), tf.float32)
+        )

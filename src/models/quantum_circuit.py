@@ -127,30 +127,33 @@ class QuantumCircuit:
         return str(self.circuit)
 
 
-def create_readout_operators(n_qubits: int, local: bool = False) -> List[cirq.PauliSum]:
+def create_readout_operators(n_qubits: int, local: bool = False) -> cirq.PauliSum:
     """
-    Create measurement operators for the QNN readout layer.
-    
+    Create the cost readout operator for the PQC.
+
+    Both costs are expressed as a *single* ``cirq.PauliSum``
+    so the PQC output shape is ``(batch, 1)`` in both cases.
+
     Args:
         n_qubits: Number of qubits in the circuit.
-        local: If True, create per-qubit Pauli-Z operators for local
-               cost function training (Cerezo et al., 2021).
-               If False, create a single global Pauli-Z operator on
-               the first qubit.
-               
+        local: If True, return the local cost ``(1/n) * Σᵢ Zᵢ``.
+               If False (default), return the genuinely global cost
+               ``Z⊗…⊗Z`` (product over all qubits).
+
     Returns:
-        List of Pauli-Z measurement operators.
+        A single ``cirq.PauliSum``. The global operator has support on all
+        qubits; the local operator is a scaled single-qubit sum.
     """
     qubits = cirq.GridQubit.rect(1, n_qubits)
-    
+
     if local:
-        # Local cost: independent measurement on each qubit
-        operators = [cirq.Z(qubit) for qubit in qubits]
-    else:
-        # Global cost: measure first qubit only
-        operators = [cirq.Z(qubits[0])]
-    
-    return operators
+        terms = [cirq.PauliString({q: cirq.Z}) for q in qubits]
+        return cirq.PauliSum.from_pauli_strings(terms) * (1.0 / n_qubits)
+
+    global_obs = cirq.PauliString()
+    for q in qubits:
+        global_obs *= cirq.Z(q)
+    return cirq.PauliSum.from_pauli_strings([global_obs])
 
 
 if __name__ == "__main__":

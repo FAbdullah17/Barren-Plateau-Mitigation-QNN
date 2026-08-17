@@ -1,219 +1,202 @@
 """Visualization utilities for training results and cross-approach comparison.
 
-Provides plotting functions for training history (loss, accuracy, gradient
-norms, gradient variance), multi-approach comparison bar charts, and
-gradient norm trajectory overlays. All plots use publication-quality
-formatting with Seaborn styling.
+Plots step-based training history, the ``mean_param_grad_variance`` trajectory
+per approach, and a cross-approach test-accuracy comparison across depths. No
+binary "barren plateau" threshold lines are drawn.
 """
 
-import matplotlib.pyplot as plt
-import seaborn as sns
-import numpy as np
-from typing import Dict, List, Optional
 import os
+from typing import Dict, Optional
 
+import matplotlib.pyplot as plt
+import numpy as np
 
-# Set publication-quality style defaults
-sns.set_style("whitegrid")
-plt.rcParams['figure.figsize'] = (12, 8)
+from src.utils.constants import COLORS, PLOT_DPI, PLOT_FIGSIZE
+
+# Publication-quality defaults.
+plt.rcParams['figure.figsize'] = PLOT_FIGSIZE
 plt.rcParams['font.size'] = 10
+
+_FALLBACK_COLORS = ['#3498db', '#e74c3c', '#2ecc71', '#f39c12']
 
 
 def plot_training_history(
     history: Dict,
     save_path: Optional[str] = None,
-    title: str = "Training History"
+    title: str = "Training History",
+    show: bool = True,
 ):
-    """
-    Plot training and validation metrics over epochs.
-    
-    Generates a 2x2 grid showing loss, accuracy, gradient norms (log scale),
-    and gradient variance (log scale). Optionally marks layer transitions
-    for layerwise training experiments.
-    
+    """Plot step-based training loss and accuracy.
+
+    The history contains per-step ``train_loss``/``train_acc`` (x = ``step``)
+    and validation metrics recorded every ``log_frequency`` steps
+    (x = ``val_step``).
+
     Args:
-        history: Dictionary containing 'train_loss', 'val_loss', 'train_acc',
-                 'val_acc', 'gradient_norms', 'gradient_variance', and
-                 optionally 'layer_transitions'.
-        save_path: Path to save figure (creates directories if needed).
+        history: dict with ``step``, ``train_loss``, ``train_acc``,
+            ``val_step``, ``val_loss``, ``val_acc``.
+        save_path: Path to save the figure (directories created as needed).
         title: Figure title.
+        show: Call ``plt.show()`` when True (pass False in batch runners).
     """
-    fig, axes = plt.subplots(2, 2, figsize=(15, 10))
-    fig.suptitle(title, fontsize=16, fontweight='bold')
-    
-    # Loss
-    axes[0, 0].plot(history['train_loss'], label='Train', linewidth=2)
-    axes[0, 0].plot(history['val_loss'], label='Validation', linewidth=2)
-    axes[0, 0].set_xlabel('Epoch')
-    axes[0, 0].set_ylabel('Loss')
-    axes[0, 0].set_title('Loss Over Time')
-    axes[0, 0].legend()
-    axes[0, 0].grid(True, alpha=0.3)
-    
-    # Accuracy
-    axes[0, 1].plot(history['train_acc'], label='Train', linewidth=2)
-    axes[0, 1].plot(history['val_acc'], label='Validation', linewidth=2)
-    axes[0, 1].set_xlabel('Epoch')
-    axes[0, 1].set_ylabel('Accuracy')
-    axes[0, 1].set_title('Accuracy Over Time')
-    axes[0, 1].legend()
-    axes[0, 1].grid(True, alpha=0.3)
-    
-    # Gradient norms (log scale)
-    axes[1, 0].plot(history['gradient_norms'], linewidth=2, color='green')
-    axes[1, 0].set_xlabel('Epoch')
-    axes[1, 0].set_ylabel('Gradient Norm')
-    axes[1, 0].set_yscale('log')
-    axes[1, 0].set_title('Gradient Norms (Log Scale)')
-    axes[1, 0].axhline(y=1e-6, color='red', linestyle='--', label='Barren Plateau Threshold')
-    axes[1, 0].legend()
-    axes[1, 0].grid(True, alpha=0.3)
-    
-    # Gradient variance (log scale)
-    axes[1, 1].plot(history['gradient_variance'], linewidth=2, color='purple')
-    axes[1, 1].set_xlabel('Epoch')
-    axes[1, 1].set_ylabel('Gradient Variance')
-    axes[1, 1].set_yscale('log')
-    axes[1, 1].set_title('Gradient Variance (Log Scale)')
-    axes[1, 1].grid(True, alpha=0.3)
-    
-    # Mark layer transitions for layerwise training
-    if 'layer_transitions' in history and history['layer_transitions']:
-        for transition in history['layer_transitions']:
-            for ax in axes.flat:
-                ax.axvline(x=transition, color='orange', linestyle=':', alpha=0.5)
-    
+    step = np.asarray(history['step'], dtype=int)
+    val_step = np.asarray(history.get('val_step', []), dtype=int)
+
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+    fig.suptitle(title, fontsize=14, fontweight='bold')
+
+    axes[0].plot(step, history['train_loss'], label='Train', linewidth=2)
+    if len(val_step):
+        axes[0].plot(
+            val_step, history['val_loss'], label='Validation',
+            linewidth=2, marker='o', markersize=3,
+        )
+    axes[0].set_xlabel('Gradient step')
+    axes[0].set_ylabel('Loss')
+    axes[0].set_title('Loss over gradient steps')
+    axes[0].legend()
+    axes[0].grid(True, alpha=0.3)
+
+    axes[1].plot(step, history['train_acc'], label='Train', linewidth=2)
+    if len(val_step):
+        axes[1].plot(
+            val_step, history['val_acc'], label='Validation',
+            linewidth=2, marker='o', markersize=3,
+        )
+    axes[1].set_xlabel('Gradient step')
+    axes[1].set_ylabel('Accuracy')
+    axes[1].set_title('Accuracy over gradient steps')
+    axes[1].legend()
+    axes[1].grid(True, alpha=0.3)
+
     plt.tight_layout()
-    
     if save_path:
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        plt.savefig(save_path, dpi=PLOT_DPI, bbox_inches='tight')
         print(f"Saved plot to {save_path}")
-    
-    plt.show()
-
-
-def plot_comparison(
-    results_dict: Dict[str, Dict],
-    save_path: Optional[str] = None
-):
-    """
-    Compare metrics across different training approaches.
-    
-    Generates a 1x3 figure showing test accuracy, training time, and
-    mean gradient norm for each approach side by side.
-    
-    Args:
-        results_dict: Dictionary mapping approach names to result dictionaries,
-                      each containing 'test_acc', 'training_time', and
-                      'gradient_stats'.
-        save_path: Path to save figure.
-    """
-    approaches = list(results_dict.keys())
-    test_accs = [results_dict[a]['test_acc'] * 100 for a in approaches]
-    train_times = [results_dict[a]['training_time'] for a in approaches]
-    grad_norms = [results_dict[a]['gradient_stats'].get('mean_norm', 0) for a in approaches]
-    
-    fig, axes = plt.subplots(1, 3, figsize=(18, 5))
-    fig.suptitle('Comparison Across Approaches', fontsize=16, fontweight='bold')
-    
-    # Test Accuracy
-    bars1 = axes[0].bar(approaches, test_accs, color=['#3498db', '#e74c3c', '#2ecc71'])
-    axes[0].set_ylabel('Test Accuracy (%)')
-    axes[0].set_title('Test Accuracy')
-    axes[0].set_ylim([0, 100])
-    axes[0].grid(True, alpha=0.3, axis='y')
-    for bar in bars1:
-        height = bar.get_height()
-        axes[0].text(bar.get_x() + bar.get_width()/2., height,
-                    f'{height:.1f}%', ha='center', va='bottom')
-    
-    # Training Time
-    bars2 = axes[1].bar(approaches, train_times, color=['#3498db', '#e74c3c', '#2ecc71'])
-    axes[1].set_ylabel('Training Time (seconds)')
-    axes[1].set_title('Training Time')
-    axes[1].grid(True, alpha=0.3, axis='y')
-    for bar in bars2:
-        height = bar.get_height()
-        axes[1].text(bar.get_x() + bar.get_width()/2., height,
-                    f'{height:.1f}s', ha='center', va='bottom')
-    
-    # Gradient Norms (log scale)
-    bars3 = axes[2].bar(approaches, grad_norms, color=['#3498db', '#e74c3c', '#2ecc71'])
-    axes[2].set_ylabel('Mean Gradient Norm')
-    axes[2].set_title('Gradient Behavior')
-    axes[2].set_yscale('log')
-    axes[2].axhline(y=1e-6, color='red', linestyle='--', linewidth=2, label='BP Threshold')
-    axes[2].legend()
-    axes[2].grid(True, alpha=0.3, axis='y')
-    
-    plt.tight_layout()
-    
-    if save_path:
-        os.makedirs(os.path.dirname(save_path), exist_ok=True)
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')
-        print(f"Saved comparison plot to {save_path}")
-    
-    plt.show()
+    if show:
+        plt.show()
+    else:
+        plt.close(fig)
+    return fig
 
 
 def plot_gradient_trajectory(
-    histories: Dict[str, Dict],
-    save_path: Optional[str] = None
+    trajectories: Dict[str, Dict],
+    save_path: Optional[str] = None,
+    title: str = "Mean parameter-gradient variance trajectories",
+    show: bool = True,
 ):
-    """
-    Plot gradient norm trajectories for different training approaches.
-    
-    Overlays gradient norm curves on a single log-scale plot to highlight
-    differences in gradient behavior between approaches (e.g., vanishing
-    gradients in baseline vs. maintained gradients in layerwise training).
-    
+    """Overlay per-approach ``mean_param_grad_variance`` trajectories.
+
+    The training diagnostic ``\\bar{V}^x`` (variance over samples of the
+    per-parameter gradient) is plotted against the gradient step on a log
+    scale, one curve per approach.
+
     Args:
-        histories: Dictionary mapping approach names to training histories,
-                   each containing a 'gradient_norms' list.
-        save_path: Path to save figure.
+        trajectories: dict mapping approach name to a ``training_diagnostic``
+            dict containing ``trajectory: {step: [...], mean_param_grad_variance: [...]}``.
+        save_path: Path to save the figure.
+        title: Figure title.
+        show: Call ``plt.show()`` when True.
     """
-    plt.figure(figsize=(12, 6))
-    
-    colors = ['#3498db', '#e74c3c', '#2ecc71', '#f39c12']
-    
-    for i, (name, history) in enumerate(histories.items()):
-        plt.plot(
-            history['gradient_norms'],
-            label=name,
-            linewidth=2,
-            color=colors[i % len(colors)]
+    fig, ax = plt.subplots(figsize=(12, 6))
+
+    for i, (name, diagnostic) in enumerate(trajectories.items()):
+        trajectory = diagnostic['trajectory']
+        color = COLORS.get(name, _FALLBACK_COLORS[i % len(_FALLBACK_COLORS)])
+        ax.plot(
+            trajectory['step'],
+            trajectory['mean_param_grad_variance'],
+            label=name, linewidth=2, color=color,
         )
-    
-    plt.axhline(y=1e-6, color='red', linestyle='--', linewidth=2, 
-                label='Barren Plateau Threshold', alpha=0.7)
-    
-    plt.xlabel('Training Step', fontsize=12)
-    plt.ylabel('Gradient Norm', fontsize=12)
-    plt.title('Gradient Norm Trajectories', fontsize=14, fontweight='bold')
-    plt.yscale('log')
-    plt.legend(fontsize=10)
-    plt.grid(True, alpha=0.3)
-    
+
+    ax.set_xlabel('Gradient step')
+    ax.set_ylabel(r'Mean parameter-gradient variance $\bar{V}^x$')
+    ax.set_title(title, fontsize=14, fontweight='bold')
+    ax.set_yscale('log')
+    ax.legend(fontsize=10)
+    ax.grid(True, alpha=0.3)
+
     plt.tight_layout()
-    
     if save_path:
         os.makedirs(os.path.dirname(save_path), exist_ok=True)
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        plt.savefig(save_path, dpi=PLOT_DPI, bbox_inches='tight')
         print(f"Saved gradient trajectory plot to {save_path}")
-    
-    plt.show()
+    if show:
+        plt.show()
+    else:
+        plt.close(fig)
+    return fig
+
+
+def plot_comparison(
+    summary: Dict[str, Dict],
+    save_path: Optional[str] = None,
+    title: str = "Mean test accuracy across depths",
+    show: bool = True,
+):
+    """Grouped bar chart of mean test accuracy per approach per depth.
+
+    Args:
+        summary: dict mapping approach name to ``{str(depth): {'test_acc': mean,
+            'test_acc_sd': sd, 'test_acc_ci': [lo, hi]}}`` (produced by
+            ``run_comparison.py``).
+        save_path: Path to save the figure.
+        title: Figure title.
+        show: Call ``plt.show()`` when True.
+    """
+    approaches = list(summary.keys())
+    depths = sorted({int(d) for entry in summary.values() for d in entry})
+
+    x = np.arange(len(depths))
+    width = 0.8 / len(approaches)
+
+    fig, ax = plt.subplots(figsize=(10, 6))
+    for i, approach in enumerate(approaches):
+        color = COLORS.get(approach, _FALLBACK_COLORS[i % len(_FALLBACK_COLORS)])
+        means = []
+        yerrs = []
+        for d in depths:
+            entry = summary[approach][str(d)]
+            means.append(entry['test_acc'])
+            ci = entry['test_acc_ci']
+            yerrs.append([entry['test_acc'] - ci[0], ci[1] - entry['test_acc']])
+        ax.bar(
+            x + i * width, means, width, label=approach,
+            color=color, yerr=np.asarray(yerrs).T, capsize=3,
+        )
+
+    ax.set_xticks(x + width * (len(approaches) - 1) / 2)
+    ax.set_xticklabels([f'L={d}' for d in depths])
+    ax.set_ylabel('Mean test accuracy')
+    ax.set_title(title, fontsize=14, fontweight='bold')
+    ax.set_ylim([0, 1])
+    ax.legend(fontsize=10)
+    ax.grid(True, alpha=0.3, axis='y')
+
+    plt.tight_layout()
+    if save_path:
+        os.makedirs(os.path.dirname(save_path), exist_ok=True)
+        plt.savefig(save_path, dpi=PLOT_DPI, bbox_inches='tight')
+        print(f"Saved comparison plot to {save_path}")
+    if show:
+        plt.show()
+    else:
+        plt.close(fig)
+    return fig
 
 
 if __name__ == "__main__":
-    # Verify plotting with synthetic data
+    # Verify plotting with synthetic data following the metrics schema.
+    rng = np.random.default_rng(0)
+    n_steps = 50
     history = {
-        'train_loss': np.random.rand(50) * 2,
-        'val_loss': np.random.rand(50) * 2,
-        'train_acc': np.random.rand(50) * 100,
-        'val_acc': np.random.rand(50) * 100,
-        'gradient_norms': np.exp(-np.linspace(0, 5, 50)) * 0.1,
-        'gradient_variance': np.exp(-np.linspace(0, 5, 50)) * 0.01
+        'step': list(range(n_steps)),
+        'train_loss': list(0.7 * np.exp(-0.05 * np.arange(n_steps)) + 0.1 * rng.random(n_steps)),
+        'train_acc': list(0.5 + 0.4 * (1 - np.exp(-0.05 * np.arange(n_steps)))),
+        'val_step': list(range(0, n_steps, 10)),
+        'val_loss': [0.7, 0.6, 0.5, 0.45, 0.4],
+        'val_acc': [0.55, 0.65, 0.72, 0.78, 0.82],
     }
-    
-    plot_training_history(history, title="Test Plot")
+    plot_training_history(history, title="Synthetic training history")

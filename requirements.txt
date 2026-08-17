@@ -1,14 +1,20 @@
+# Python 3.12 compatible stack (TFQ 0.7.5 / TF 2.16.2 / Cirq 1.3).
+# NOTE: TFQ 0.7.5 hard-requires sympy==1.14, scipy<=1.12.0, tf-keras~=2.16.0,
+# numpy<2.0, matplotlib<3.10 (see its wheel metadata). Set TF_USE_LEGACY_KERAS=1
+# before importing tensorflow (done in conftest.py and the src modules).
+
 # Core Quantum Computing Libraries
-tensorflow==2.15.0
-tensorflow-quantum==0.7.3
+tensorflow==2.16.2
+tensorflow-quantum==0.7.5
 cirq-core==1.3.0
 cirq-google==1.3.0
-sympy==1.12
+sympy==1.14
 tf_keras==2.16.0
 
 # Machine Learning
-numpy==1.24.3
+numpy==1.26.4
 scikit-learn==1.3.2
+scipy==1.12.0
 
 # Data Processing
 pandas==2.1.4

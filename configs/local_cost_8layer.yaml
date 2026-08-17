@@ -1,55 +1,45 @@
-# Local Cost Function Approach - 8 Layer Circuit
-# Standard end-to-end training with local cost function
-# Testing polynomial gradient scaling at deep circuit depth
-#
-#
+# Local-cost approach - depth 8 (8 qubits).
 
 experiment:
-  name: "local_cost_8layer"
-  approach: "local_cost"
-  description: "End-to-end training with local cost function on 8-layer circuit"
+  name: local_cost_8layer
+  approach: local_cost
 
 model:
-  n_qubits: 4
-  n_layers: 8  # Deep circuit
-  circuit_type: "hardware_efficient"
-  data_reuploading: false
+  n_qubits: 8
+  n_layers: 8
 
 training:
-  optimizer: "adam"
+  optimizer: adam
   learning_rate: 0.01
   batch_size: 20
-  epochs: 50
-  cost_function: "local"  # Average per-qubit measurements
-  local_cost: true
+  total_updates: 2500
+  cost_function: local
 
 data:
-  dataset: "mnist"
+  dataset: mnist
   digit1: 3
   digit2: 6
   train_size: 1000
   test_size: 200
   image_size: [4, 4]
-  normalization: "min_max"  # Scale to [0, 1]
-  preprocessing: "downsample_bilinear"
+  preprocessing: pca
+  n_components: 8
+  encoding: ry_angle
 
-quantum:
-  shots: 1024
-  backend: "cirq_simulator"
-  
+seeds:
+  seed_triples: 20
+  base_seed: 42
+
 metrics:
   track_gradients: true
-  gradient_variance: true
-  gradient_norm: true
-  barren_plateau_threshold: 1.0e-6
-  success_threshold: 90.0  # Percentage
+  log_frequency: 10
 
-random_seeds: [42, 123, 456, 789, 101112]
+analysis:
+  min_variance_separation_se: 2.0
+  qubit_counts: [4, 6, 8]
+  alpha: 0.05
+  multiple_comparison: holm
 
 output:
-  results_dir: "results/local_cost/depth_8"
-  save_checkpoints: true
-  save_gradients: true
-  log_frequency: 1  # Log every epoch
-
-# Expected behavior: Trainable with polynomial gradient scaling, accuracy 85-90%
+  results_dir: results/local_cost/depth_8
+  save_plot: true

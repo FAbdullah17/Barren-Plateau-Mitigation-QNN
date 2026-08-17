@@ -1,10 +1,18 @@
-"""Baseline training implementation using standard end-to-end optimization.
+"""Step-based baseline training.
 
-Trains the full parameterized quantum circuit simultaneously using gradient
-descent. Serves as the control condition to demonstrate the barren plateau
-problem, against which layerwise training and local cost function approaches
-are compared.
+Trains the full parameterized quantum circuit end to end with exactly
+``total_updates`` gradient steps — the same budget that layerwise training
+consumes (split across its stages). The dataset is shuffled once with
+``training_seed`` (decoupled from ``data_seed``/``init_seed``).
+
+Every ``log_frequency`` steps the per-sample Jacobian ``(B, P)`` is computed
+on ``diagnostic_samples`` fixed training samples and fed to ``GradientTracker``
+(the training diagnostic). Results use the metrics schema.
 """
+
+import os
+os.environ.setdefault('TF_USE_LEGACY_KERAS', '1')  # TFQ requires Keras 2
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 
 import sys
 from pathlib import Path
@@ -15,11 +23,9 @@ if str(project_root) not in sys.path:
     sys.path.insert(0, str(project_root))
 
 import tensorflow as tf
-import tensorflow_quantum as tfq
 import numpy as np
-from typing import Dict, List, Optional, Tuple
 import time
-from tqdm import tqdm
+from typing import Dict, Optional
 
 from src.models import QuantumNeuralNetwork
 from src.evaluation.metrics import GradientTracker
@@ -27,196 +33,222 @@ from src.evaluation.metrics import GradientTracker
 
 class BaselineTrainer:
     """Standard end-to-end training for quantum neural networks."""
-    
+
     def __init__(
         self,
         n_qubits: int = 4,
         n_layers: int = 4,
+        cost: str = 'global',
         learning_rate: float = 0.01,
         batch_size: int = 20,
-        local_cost: bool = False,
-        seed: Optional[int] = None
+        total_updates: int = 2500,
+        log_frequency: int = 10,
+        diagnostic_samples: int = 100,
+        init_seed: Optional[int] = None,
+        training_seed: Optional[int] = None,
+        track_gradients: bool = True,
     ):
         """
-        Initialize baseline trainer.
-        
+        Initialize the step-based baseline trainer.
+
         Args:
-            n_qubits: Number of qubits
-            n_layers: Number of circuit layers
-            learning_rate: Learning rate for Adam optimizer
-            batch_size: Batch size for training
-            local_cost: Use local cost functions
-            seed: Random seed for reproducibility
+            n_qubits: Number of qubits.
+            n_layers: Number of circuit layers.
+            cost: 'global' or 'local' cost function.
+            learning_rate: Adam learning rate.
+            batch_size: Mini-batch size.
+            total_updates: Total number of gradient steps.
+            log_frequency: Compute/log the gradient diagnostic every N steps.
+            diagnostic_samples: Number of fixed training samples used for the
+                per-sample Jacobian (accumulate >= 100 samples per logged step
+                to stabilize the variance estimate).
+            init_seed: PQC parameter init seed (decoupled from training).
+            training_seed: Dataset shuffle seed (decoupled from data/init).
+            track_gradients: Compute the gradient diagnostic when True.
         """
+        if cost not in ('global', 'local'):
+            raise ValueError(f"cost must be 'global' or 'local', got {cost!r}")
+        if total_updates < 1:
+            raise ValueError(f"total_updates must be >= 1, got {total_updates}")
+        if log_frequency < 1:
+            raise ValueError(f"log_frequency must be >= 1, got {log_frequency}")
+        if diagnostic_samples < 1:
+            raise ValueError(
+                f"diagnostic_samples must be >= 1, got {diagnostic_samples}"
+            )
+
         self.n_qubits = n_qubits
         self.n_layers = n_layers
+        self.cost = cost
         self.learning_rate = learning_rate
         self.batch_size = batch_size
-        self.local_cost = local_cost
-        self.seed = seed
-        
-        if seed is not None:
-            tf.random.set_seed(seed)
-            np.random.seed(seed)
-        
-        # Initialize model
+        self.total_updates = total_updates
+        self.log_frequency = log_frequency
+        self.diagnostic_samples = diagnostic_samples
+        self.init_seed = init_seed
+        self.training_seed = training_seed
+        self.track_gradients = track_gradients
+
+        if training_seed is not None:
+            tf.random.set_seed(training_seed)
+            np.random.seed(training_seed)
+
         self.model = QuantumNeuralNetwork(
             n_qubits=n_qubits,
             n_layers=n_layers,
-            local_cost=local_cost
+            cost=cost,
+            init_seed=init_seed,
         )
-        
-        # Optimizer and loss
         self.optimizer = tf.keras.optimizers.Adam(learning_rate=learning_rate)
         self.loss_fn = tf.keras.losses.BinaryCrossentropy()
-        
-        # Gradient tracker
+        self.per_sample_loss = tf.keras.losses.BinaryCrossentropy(
+            reduction=tf.keras.losses.Reduction.NONE
+        )
         self.gradient_tracker = GradientTracker()
-        
-        # History
-        self.history = {
-            'train_loss': [],
-            'train_acc': [],
-            'val_loss': [],
-            'val_acc': [],
-            'gradient_norms': [],
-            'gradient_variance': []
-        }
-    
+
+        # Runtime-derived parameter count.
+        self.n_parameters = self.model.get_num_parameters()
+
+        self._diag_circuits = None
+        self._diag_labels = None
+
     def train(
         self,
         train_circuits: tf.Tensor,
         train_labels: np.ndarray,
         val_circuits: tf.Tensor,
         val_labels: np.ndarray,
-        epochs: int = 50
     ) -> Dict:
         """
-        Train the model.
-        
+        Train for exactly ``total_updates`` gradient steps.
+
         Args:
-            train_circuits: Training quantum circuits
-            train_labels: Training labels
-            val_circuits: Validation quantum circuits
-            val_labels: Validation labels
-            epochs: Number of training epochs
-            
+            train_circuits: Training quantum circuits.
+            train_labels: Training labels.
+            val_circuits: Validation/test quantum circuits.
+            val_labels: Validation/test labels.
+
         Returns:
-            Dictionary containing training history and metrics
+            Results dict following the metrics schema.
         """
-        print(f"Starting baseline training for {epochs} epochs...")
-        print(f"Model: {self.n_layers} layers, {self.model.get_num_parameters()} parameters")
-        print(f"Local cost: {self.local_cost}")
-        
-        start_time = time.time()
-        
-        # Create dataset
-        train_dataset = tf.data.Dataset.from_tensor_slices((train_circuits, train_labels))
-        train_dataset = train_dataset.shuffle(len(train_labels)).batch(self.batch_size)
-        
-        for epoch in range(epochs):
-            epoch_loss = []
-            epoch_acc = []
-            epoch_gradients = []
-            
-            # Training loop
-            for batch_circuits, batch_labels in tqdm(
-                train_dataset, 
-                desc=f"Epoch {epoch+1}/{epochs}",
-                leave=False
-            ):
-                loss, acc, gradients = self._train_step(batch_circuits, batch_labels)
-                epoch_loss.append(loss.numpy())
-                epoch_acc.append(acc.numpy())
-                epoch_gradients.extend([g.numpy() for g in gradients])
-            
-            # Compute metrics
-            train_loss = np.mean(epoch_loss)
-            train_acc = np.mean(epoch_acc)
-            
-            # Validation
-            val_loss, val_acc = self._evaluate(val_circuits, val_labels)
-            
-            # Gradient statistics
-            valid_gradients = [g for g in epoch_gradients if g is not None]
-            if valid_gradients:
-                grad_norm = np.mean([np.linalg.norm(g) for g in valid_gradients])
-                grad_var = np.var([np.linalg.norm(g) for g in valid_gradients])
-            else:
-                grad_norm = 0.0
-                grad_var = 0.0
-            
-            # Track gradients
-            self.gradient_tracker.update(epoch_gradients)
-            
-            # Store history
-            self.history['train_loss'].append(train_loss)
-            self.history['train_acc'].append(train_acc)
-            self.history['val_loss'].append(val_loss)
-            self.history['val_acc'].append(val_acc)
-            self.history['gradient_norms'].append(grad_norm)
-            self.history['gradient_variance'].append(grad_var)
-            
-            # Print progress
-            print(f"Epoch {epoch+1}/{epochs} - "
-                  f"Loss: {train_loss:.4f} - Acc: {train_acc:.4f} - "
-                  f"Val Loss: {val_loss:.4f} - Val Acc: {val_acc:.4f} - "
-                  f"Grad Norm: {grad_norm:.6f}")
-        
-        training_time = time.time() - start_time
-        
-        # Final evaluation
-        test_loss, test_acc = self._evaluate(val_circuits, val_labels)
-        
-        results = {
-            'history': self.history,
-            'final_train_loss': self.history['train_loss'][-1],
-            'final_train_acc': self.history['train_acc'][-1],
-            'final_val_loss': self.history['val_loss'][-1],
-            'final_val_acc': self.history['val_acc'][-1],
-            'test_loss': test_loss,
-            'test_acc': test_acc,
-            'training_time': training_time,
-            'gradient_stats': self.gradient_tracker.get_statistics(),
-            'barren_plateau_detected': self.gradient_tracker.detect_barren_plateau()
+        n_train = len(train_labels)
+        if n_train < 1:
+            raise ValueError("train_labels must not be empty")
+
+        # Dataset shuffled once with training_seed, then repeated and batched.
+        train_dataset = tf.data.Dataset.from_tensor_slices(
+            (train_circuits, train_labels)
+        )
+        train_dataset = train_dataset.shuffle(
+            n_train,
+            seed=self.training_seed,
+            reshuffle_each_iteration=False,
+        ).repeat().batch(self.batch_size)
+        train_dataset = train_dataset.take(self.total_updates)
+
+        # Fixed diagnostic samples (stable Jacobian estimate).
+        self._diag_circuits = train_circuits[: self.diagnostic_samples]
+        self._diag_labels = train_labels[: self.diagnostic_samples]
+
+        history = {
+            'step': [],
+            'train_loss': [],
+            'train_acc': [],
+            'val_step': [],
+            'val_loss': [],
+            'val_acc': [],
         }
-        
-        print(f"\nTraining completed in {training_time:.2f}s")
-        print(f"Final Test Accuracy: {test_acc:.4f}")
-        print(f"Barren Plateau: {results['barren_plateau_detected']}")
-        
-        return results
-    
-    # Note: @tf.function removed for quantum circuit compatibility
-    # TFQ already uses graph compilation internally
+
+        start_time = time.time()
+        for step, (batch_circuits, batch_labels) in enumerate(train_dataset):
+            loss, acc = self._train_step(batch_circuits, batch_labels)
+            history['step'].append(step)
+            history['train_loss'].append(float(loss))
+            history['train_acc'].append(float(acc))
+
+            if (step + 1) % self.log_frequency == 0 or (step + 1) == self.total_updates:
+                val_loss, val_acc = self._evaluate(val_circuits, val_labels)
+                history['val_step'].append(step + 1)
+                history['val_loss'].append(float(val_loss))
+                history['val_acc'].append(float(val_acc))
+                if self.track_gradients:
+                    self._log_diagnostic(step + 1)
+
+        training_time = time.time() - start_time
+
+        test_loss, test_acc = self._evaluate(val_circuits, val_labels)
+
+        diagnostic = self.gradient_tracker.get_statistics()
+        diagnostic['n_parameters'] = self.n_parameters
+
+        return {
+            'config': {
+                'approach': 'baseline',
+                'n_qubits': self.n_qubits,
+                'n_layers': self.n_layers,
+                'cost': self.cost,
+                'learning_rate': self.learning_rate,
+                'batch_size': self.batch_size,
+                'total_updates': self.total_updates,
+                'log_frequency': self.log_frequency,
+                'init_seed': self.init_seed,
+                'training_seed': self.training_seed,
+                'track_gradients': self.track_gradients,
+            },
+            'total_updates': self.total_updates,
+            'layerwise_budget_split': None,
+            'n_parameters': self.n_parameters,
+            'test_loss': float(test_loss),
+            'test_acc': float(test_acc),
+            'training_time_seconds': training_time,
+            'training_diagnostic': diagnostic,
+            'history': history,
+        }
+
     def _train_step(self, circuits, labels):
-        """Single training step."""
+        """Single gradient step; returns (loss, accuracy) as floats."""
         with tf.GradientTape() as tape:
             predictions = self.model(circuits, training=True)
-            # Squeeze predictions to match labels shape (batch,)
             predictions = tf.squeeze(predictions, axis=-1)
             loss = self.loss_fn(labels, predictions)
-        
+
         gradients = tape.gradient(loss, self.model.trainable_variables)
-        self.optimizer.apply_gradients(zip(gradients, self.model.trainable_variables))
-        
-        # Compute accuracy
-        predictions_binary = tf.cast(predictions > 0.5, tf.int32)
-        labels_int = tf.cast(labels, tf.int32)
-        accuracy = tf.reduce_mean(tf.cast(tf.equal(predictions_binary, labels_int), tf.float32))
-        
-        # Return TensorFlow tensors (not numpy), let caller convert if needed
-        return loss, accuracy, gradients
-    
+        self.optimizer.apply_gradients(
+            zip(gradients, self.model.trainable_variables)
+        )
+        accuracy = self._batch_accuracy(predictions, labels)
+        return float(loss.numpy()), float(accuracy.numpy())
+
+    def _log_diagnostic(self, step: int) -> None:
+        """Per-sample Jacobian (B, P) on fixed samples -> gradient tracker.
+
+        The per-sample loss must be computed from ``(B, 1)`` inputs: legacy
+        Keras ``BinaryCrossentropy(reduction=NONE)`` returns per-sample losses
+        only for 2-D inputs. The resulting Jacobian is ``(B, P)``.
+        """
+        labels_2d = tf.cast(self._diag_labels, tf.float32)[:, None]
+        with tf.GradientTape() as tape:
+            predictions = self.model(self._diag_circuits, training=False)
+            loss_per_sample = self.per_sample_loss(labels_2d, predictions)
+        jacobian = tape.jacobian(
+            loss_per_sample, self.model.trainable_variables[0]
+        )
+        self.gradient_tracker.update(
+            jacobian.numpy(), step=step, samples=self._diag_circuits.shape[0]
+        )
+
     def _evaluate(self, circuits, labels):
-        """Evaluate on given data."""
+        """Return (loss, accuracy) on the given data."""
         predictions = self.model(circuits, training=False)
-        # Squeeze predictions to match labels shape (batch,)
         predictions = tf.squeeze(predictions, axis=-1)
-        loss = self.loss_fn(labels, predictions).numpy()
-        
-        predictions_binary = tf.cast(predictions > 0.5, tf.int32)
+        loss = self.loss_fn(labels, predictions)
+        accuracy = self._batch_accuracy(predictions, labels)
+        return float(loss.numpy()), float(accuracy.numpy())
+
+    @staticmethod
+    def _batch_accuracy(predictions, labels):
+        preds_binary = tf.cast(predictions > 0.5, tf.int32)
         labels_int = tf.cast(labels, tf.int32)
-        accuracy = tf.reduce_mean(tf.cast(tf.equal(predictions_binary, labels_int), tf.float32)).numpy()
-        
-        return loss, accuracy
+        return tf.reduce_mean(
+            tf.cast(tf.equal(preds_binary, labels_int), tf.float32)
+        )

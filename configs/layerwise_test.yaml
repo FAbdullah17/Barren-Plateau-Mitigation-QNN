@@ -1,58 +1,39 @@
-# Layerwise Training Configuration - Same as Baseline for fair comparison
-# Matches baseline_L4 configuration exactly
+# Layerwise smoke-test config. Small sizes for quick runs.
 
 experiment:
-  name: "layerwise_test"
-  approach: "layerwise"
-  description: "Layerwise training with same config as baseline for comparison"
+  name: layerwise_test
+  approach: layerwise
 
 model:
-  n_qubits: 4
-  target_layers: 4
-  circuit_type: "hardware_efficient"
-  data_reuploading: false
+  n_qubits: 8
+  n_layers: 2
 
 training:
-  optimizer: "adam"
+  optimizer: adam
   learning_rate: 0.01
   batch_size: 20
-  epochs_per_layer: 10  # 10 epochs per layer x 4 layers = 40 epochs
-  finetune_epochs: 10   # + 10 finetune = 50 total epochs (same as baseline)
-  cost_function: "global"
-  local_cost: false
-  freezing_strategy: "immediate"
+  total_updates: 40
+  cost_function: global
 
 data:
-  dataset: "mnist"
+  dataset: mnist
   digit1: 3
   digit2: 6
-  train_size: 1000  # Same as baseline
-  test_size: 200    # Same as baseline
+  train_size: 100
+  test_size: 50
   image_size: [4, 4]
-  normalization: "min_max"
-  preprocessing: "downsample_bilinear"
+  preprocessing: pca
+  n_components: 8
+  encoding: ry_angle
 
-quantum:
-  shots: 1024
-  backend: "cirq_simulator"
-  
+seeds:
+  seed_triples: 2
+  base_seed: 42
+
 metrics:
   track_gradients: true
-  gradient_variance: true
-  gradient_norm: true
-  barren_plateau_threshold: 1e-6  # Same threshold as baseline
-  success_threshold: 90.0
-  track_per_layer: true
-
-random_seeds: [42]
+  log_frequency: 10
 
 output:
-  results_dir: "results/layerwise/test"
-  save_checkpoints: true
-  save_gradients: true
-  log_frequency: 1
-
-# Training schedule (for 2 layers):
-# Epochs 1: Train layer 1 only
-# Epochs 2: Train layer 2 only (layer 1 frozen)
-# Epochs 3: Fine-tune all layers
+  results_dir: results/layerwise/test
+  save_plot: true

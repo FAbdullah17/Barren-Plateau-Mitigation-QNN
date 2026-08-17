@@ -1,55 +1,45 @@
-# Baseline Approach - 6 Layer Circuit
-# Standard end-to-end training with global cost function
-# Testing gradient degradation at increased depth
-#
-#
+# Baseline approach - depth 6 (8 qubits).
 
 experiment:
-  name: "baseline_6layer"
-  approach: "baseline"
-  description: "Standard end-to-end training on 6-layer circuit"
+  name: baseline_6layer
+  approach: baseline
 
 model:
-  n_qubits: 4
-  n_layers: 6  # Increased to 6 layers
-  circuit_type: "hardware_efficient"
-  data_reuploading: false
+  n_qubits: 8
+  n_layers: 6
 
 training:
-  optimizer: "adam"
+  optimizer: adam
   learning_rate: 0.01
   batch_size: 20
-  epochs: 50
-  cost_function: "global"  # Measure all qubits together
-  local_cost: false
+  total_updates: 2500
+  cost_function: global
 
 data:
-  dataset: "mnist"
+  dataset: mnist
   digit1: 3
   digit2: 6
   train_size: 1000
   test_size: 200
   image_size: [4, 4]
-  normalization: "min_max"  # Scale to [0, 1]
-  preprocessing: "downsample_bilinear"
+  preprocessing: pca
+  n_components: 8
+  encoding: ry_angle
 
-quantum:
-  shots: 1024
-  backend: "cirq_simulator"
-  
+seeds:
+  seed_triples: 20
+  base_seed: 42
+
 metrics:
   track_gradients: true
-  gradient_variance: true
-  gradient_norm: true
-  barren_plateau_threshold: 1.0e-6
-  success_threshold: 90.0  # Percentage
+  log_frequency: 10
 
-random_seeds: [42, 123, 456, 789, 101112]
+analysis:
+  min_variance_separation_se: 2.0
+  qubit_counts: [4, 6, 8]
+  alpha: 0.05
+  multiple_comparison: holm
 
 output:
-  results_dir: "results/baseline/depth_6"
-  save_checkpoints: true
-  save_gradients: true
-  log_frequency: 1  # Log every epoch
-
-# Expected behavior: Observable gradient vanishing compared to 4-layer
+  results_dir: results/baseline/depth_6
+  save_plot: true

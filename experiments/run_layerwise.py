@@ -1,181 +1,96 @@
-"""
-Layerwise Experiment: Incremental Layer-by-Layer Training
+"""Layerwise runner: incremental Skolik training.
 
-Runs a single layerwise training experiment following the methodology of
-Skolik et al. (2020). Layers are added progressively with previously trained
-parameters frozen, mitigating barren plateaus in deep quantum circuits.
+Each ansatz layer is trained with earlier layers baked in and frozen, then the
+full ansatz is fine-tuned, consuming exactly ``total_updates`` gradient steps.
+One run per seed-triple index.
 
 Usage:
-    python experiments/run_layerwise.py configs/layerwise_4layer.yaml --seed 42
+    python experiments/run_layerwise.py configs/layerwise_8layer.yaml --seed-index 0
 """
 
-import sys
 import os
+import sys
+
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import yaml
-import json
+os.environ.setdefault('TF_USE_LEGACY_KERAS', '1')  # TFQ requires Keras 2
+
 import argparse
-import tensorflow_quantum as tfq
-import cirq
-import numpy as np
-from pathlib import Path
 
-from src.data import load_mnist_binary
+from experiments.common import (
+    load_and_prepare, save_run, print_run_header,
+)
+from src.utils.config_validator import load_config, validate_config, derive_seed_triple
 from src.training import LayerwiseTrainer
-from src.evaluation import plot_training_history
-
-
-def load_config(config_path: str = "configs/layerwise_test.yaml"):
-    """Load configuration from YAML file."""
-    with open(config_path, 'r') as f:
-        config = yaml.safe_load(f)
-    
-    # Flatten nested config structure for easier access
-    flat_config = {
-        'experiment_name': config['experiment']['name'],
-        'approach': config['experiment']['approach'],
-        'n_qubits': config['model']['n_qubits'],
-        'target_layers': config['model']['target_layers'],
-        'learning_rate': config['training']['learning_rate'],
-        'batch_size': config['training']['batch_size'],
-        'epochs_per_layer': config['training']['epochs_per_layer'],
-        'finetune_epochs': config['training']['finetune_epochs'],
-        'local_cost': config['training']['local_cost'],
-        'digit1': config['data']['digit1'],
-        'digit2': config['data']['digit2'],
-        'train_size': config['data']['train_size'],
-        'test_size': config['data']['test_size'],
-        'image_size': config['data']['image_size'],
-        'results_dir': config['output']['results_dir'],
-        'random_seeds': config['random_seeds']
-    }
-    return flat_config, config  # Return both flat and original
-
-
-def convert_to_circuits(data: np.ndarray, n_qubits: int = 4):
-    """Convert data to quantum circuits."""
-    qubits = cirq.GridQubit.rect(1, n_qubits)
-    circuits = []
-    
-    for sample in data:
-        circuit = cirq.Circuit()
-        angles = sample * np.pi
-        for i, qubit in enumerate(qubits):
-            if i < len(angles):
-                circuit.append(cirq.ry(angles[i])(qubit))
-        circuits.append(circuit)
-    
-    return tfq.convert_to_tensor(circuits)
 
 
 def main():
-    """Run layerwise experiment."""
-    parser = argparse.ArgumentParser(description='Run layerwise QNN experiment')
-    parser.add_argument('config', type=str, help='Path to config YAML file')
-    parser.add_argument('--seed', type=int, default=None, help='Random seed (overrides config)')
+    parser = argparse.ArgumentParser(
+        description='Run a layerwise (Skolik) QNN experiment'
+    )
+    parser.add_argument('config', type=str, help='Path to a config YAML')
+    parser.add_argument(
+        '--seed-index', type=int, default=0,
+        help='Seed-triple index in [0, seeds.seed_triples)',
+    )
     args = parser.parse_args()
-    
-    print("="*70)
-    print("LAYERWISE EXPERIMENT: Incremental Layer-by-Layer Training")
-    print("="*70)
-    
-    # Load configuration
-    config, full_config = load_config(args.config)
-    
-    # Use provided seed or first seed from config
-    seed = args.seed if args.seed is not None else config['random_seeds'][0]
-    
-    print(f"\nConfiguration: {args.config}")
-    print(f"  Target Layers: {config['target_layers']}")
-    print(f"  Epochs per Layer: {config['epochs_per_layer']}")
-    print(f"  Finetune Epochs: {config['finetune_epochs']}")
-    print(f"  Learning Rate: {config['learning_rate']}")
-    print(f"  Batch Size: {config['batch_size']}")
-    print(f"  Random Seed: {seed}")
-    
-    # Load and prepare data
-    print("\nLoading MNIST data...")
-    X_train, y_train, X_test, y_test = load_mnist_binary(
-        digit1=config['digit1'],
-        digit2=config['digit2'],
-        train_size=config['train_size'],
-        test_size=config['test_size'],
-        image_size=tuple(config['image_size']),
-        seed=seed
+
+    config = validate_config(load_config(args.config), approach='layerwise')
+
+    if not 0 <= args.seed_index < config['seeds']['seed_triples']:
+        parser.error(
+            f"--seed-index {args.seed_index} out of range "
+            f"[0, {config['seeds']['seed_triples']})"
+        )
+    seed_triple = derive_seed_triple(config['seeds']['base_seed'], args.seed_index)
+
+    print_run_header('layerwise', config, args.seed_index, seed_triple)
+
+    train_circuits, y_train, test_circuits, y_test, pca_info = load_and_prepare(
+        config, seed_triple['data_seed']
     )
-    print(f"Training samples: {len(X_train)}")
-    print(f"Test samples: {len(X_test)}")
-    
-    # Convert to quantum circuits
-    print("\nConverting data to quantum circuits...")
-    train_circuits = convert_to_circuits(X_train, n_qubits=config['n_qubits'])
-    test_circuits = convert_to_circuits(X_test, n_qubits=config['n_qubits'])
-    
-    # Initialize trainer
-    print("\nInitializing layerwise trainer...")
+
     trainer = LayerwiseTrainer(
-        n_qubits=config['n_qubits'],
-        target_layers=config['target_layers'],
-        learning_rate=config['learning_rate'],
-        batch_size=config['batch_size'],
-        epochs_per_layer=config['epochs_per_layer'],
-        finetune_epochs=config['finetune_epochs'],
-        local_cost=config['local_cost'],
-        seed=seed
+        n_qubits=config['model']['n_qubits'],
+        n_layers=config['model']['n_layers'],
+        cost=config['training']['cost_function'],
+        learning_rate=config['training']['learning_rate'],
+        batch_size=config['training']['batch_size'],
+        total_updates=config['training']['total_updates'],
+        log_frequency=config['metrics']['log_frequency'],
+        diagnostic_samples=config['metrics']['diagnostic_samples'],
+        init_seed=seed_triple['init_seed'],
+        training_seed=seed_triple['training_seed'],
+        track_gradients=config['metrics']['track_gradients'],
     )
-    
-    # Train model
-    print("\nStarting layerwise training...")
+
     results = trainer.train(
         train_circuits=train_circuits,
         train_labels=y_train,
         val_circuits=test_circuits,
-        val_labels=y_test
+        val_labels=y_test,
     )
-    
-    # Create results directory with depth/seed structure
-    results_dir = Path(config['results_dir']) / f"seed_{seed}"
-    results_dir.mkdir(parents=True, exist_ok=True)
-    
-    # Save metrics
-    metrics_path = results_dir / "metrics.json"
-    save_results = {
-        'config': full_config,  # Save full config
-        'seed': int(seed),
-        'final_train_loss': float(results['final_train_loss']),
-        'final_train_acc': float(results['final_train_acc']),
-        'final_val_loss': float(results['final_val_loss']),
-        'final_val_acc': float(results['final_val_acc']),
-        'test_loss': float(results['test_loss']),
-        'test_acc': float(results['test_acc']),
-        'training_time': float(results['training_time']),
-        'gradient_stats': results['gradient_stats'],
-        'barren_plateau_detected': bool(results['barren_plateau_detected'])
-    }
-    with open(metrics_path, 'w') as f:
-        json.dump(save_results, f, indent=2)
-    print(f"\nMetrics saved to {metrics_path}")
-    
-    # Plot and save training history
-    plot_path = results_dir / "training_history.png"
-    plot_training_history(
-        results['history'],
-        save_path=str(plot_path),
-        title=f"Layerwise Training - {config['target_layers']} Layers (Seed {seed})"
+
+    results['config']['approach'] = config['experiment']['approach']
+
+    metrics_path, _ = save_run(
+        results, config['output']['results_dir'], args.seed_index, seed_triple, pca_info
     )
-    print(f"Plot saved to {plot_path}")
-    
-    # Print summary
-    print("\n" + "="*70)
+
+    diagnostic = results['training_diagnostic']
+    print("\n" + "=" * 70)
     print("EXPERIMENT SUMMARY")
-    print("="*70)
-    print(f"Test Accuracy: {results['test_acc']*100:.2f}%")
-    print(f"Training Time: {results['training_time']:.2f}s")
-    print(f"Barren Plateau Detected: {results['barren_plateau_detected']}")
-    print(f"Mean Gradient Norm: {results['gradient_stats']['mean_norm']:.6e}")
-    print("="*70)
+    print("=" * 70)
+    print(f"  Test accuracy: {results['test_acc'] * 100:.2f}%")
+    print(f"  Test loss:     {results['test_loss']:.4f}")
+    print(f"  Training time: {results['training_time_seconds']:.2f}s")
+    print(f"  Budget split:  {results['layerwise_budget_split']}")
+    print(f"  Mean param-gradient variance: "
+          f"{diagnostic['mean_param_grad_variance']:.3e}")
+    print(f"  n_parameters:  {results['n_parameters']}")
+    print(f"  Metrics saved to: {metrics_path}")
+    print("=" * 70)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     main()

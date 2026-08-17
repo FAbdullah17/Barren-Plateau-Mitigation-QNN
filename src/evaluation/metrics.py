@@ -1,194 +1,213 @@
-"""Metrics and evaluation utilities for quantum neural network training.
+"""Metrics and gradient-tracking utilities.
 
-Provides gradient tracking, barren plateau detection, accuracy computation,
-and cross-approach comparison tools. The GradientTracker class monitors
-gradient norms throughout training and detects vanishing gradients indicative
-of barren plateaus.
+Two distinct gradient statistics are tracked, and never conflated:
+
+* **Landscape statistic** ``V̄``: variance of the cost-function gradient over
+  *random parameter draws* (``grad_instances: (R, P)``). This is the
+  barren-plateau signature, estimated with a standard error and a bootstrap CI
+  over parameters.
+* **Training diagnostic** ``V̄^x``: per-parameter gradient variance over
+  *samples within a batch* (``grad_matrix: (B, P)``) during training, recorded
+  as a per-step trajectory.
+
+Statistics are reported with their trajectory and uncertainty instead of a
+binary ``detect_barren_plateau`` claim.
 """
 
 import numpy as np
-from typing import Dict, List
-from dataclasses import dataclass
+from typing import Dict, Sequence
+
+_BOOTSTRAP_SEED = 0
+_BOOTSTRAP_ITERATIONS = 2000
 
 
-@dataclass
-class GradientStatistics:
-    """Container for gradient statistics."""
-    mean_norm: float
-    std_norm: float
-    variance: float
-    min_norm: float
-    max_norm: float
-    median_norm: float
+def _validate_matrix(value, name: str) -> np.ndarray:
+    """Validate a 2-D float array and return it as float64."""
+    arr = np.asarray(value, dtype=np.float64)
+    if arr.ndim != 2:
+        raise ValueError(
+            f"{name} must be a 2-D array of shape (rows, parameters), "
+            f"got shape {arr.shape}"
+        )
+    if arr.shape[1] < 1:
+        raise ValueError(f"{name} must have at least one parameter column")
+    if not np.all(np.isfinite(arr)):
+        raise ValueError(f"{name} contains non-finite values")
+    return arr
 
 
 class GradientTracker:
-    """Track and analyze gradients during training."""
-    
-    def __init__(self, barren_plateau_threshold: float = 1e-6):
-        """
-        Initialize gradient tracker.
-        
+    """Training diagnostic: per-parameter gradient variance over samples.
+
+    ``update`` consumes a per-sample gradient matrix ``(B, P)`` and records
+    ``V̄^x = mean_j Var_b[g_{b,j}]`` (mean over parameters of the variance over
+    samples), the mean absolute gradient and the max absolute gradient, each as
+    a per-step trajectory. ``get_statistics`` emits the metrics schema.
+    """
+
+    def __init__(self) -> None:
+        self._steps: list = []
+        self._vbar_x: list = []
+        self._mean_abs_grad: list = []
+        self._max_abs_grad: list = []
+        self._n_samples: list = []
+
+    def update(
+        self, grad_matrix: Sequence, step: int = None, samples: int = None
+    ) -> None:
+        """Record a per-sample gradient matrix ``(B, P)``.
+
         Args:
-            barren_plateau_threshold: Threshold for detecting barren plateaus
+            grad_matrix: Array of shape ``(B, P)`` — one gradient per training
+                sample, one entry per trainable parameter.
+            step: Global training-step index this diagnostic was logged at. If
+                None, the running log index is used.
+            samples: Number of samples ``B`` (inferred if not given).
         """
-        self.gradient_norms = []
-        self.barren_plateau_threshold = barren_plateau_threshold
-    
-    def update(self, gradients: List[np.ndarray]):
-        """
-        Update with new gradients.
-        
-        Args:
-            gradients: List of gradient arrays
-        """
-        norms = [np.linalg.norm(g) for g in gradients]
-        self.gradient_norms.extend(norms)
-    
+        g = _validate_matrix(grad_matrix, "grad_matrix")
+        b, p = g.shape
+        var_per_param = np.var(g, axis=0)  # (P,) variance over samples
+        self._steps.append(int(step) if step is not None else len(self._steps))
+        self._vbar_x.append(float(np.mean(var_per_param)))
+        self._mean_abs_grad.append(float(np.mean(np.abs(g))))
+        self._max_abs_grad.append(float(np.max(np.abs(g))))
+        self._n_samples.append(int(samples) if samples is not None else int(b))
+
+    @property
+    def n_logged_steps(self) -> int:
+        return len(self._steps)
+
+    @property
+    def is_empty(self) -> bool:
+        return len(self._steps) == 0
+
     def get_statistics(self) -> Dict:
-        """Compute gradient statistics."""
-        if not self.gradient_norms:
-            return {}
-        
-        norms = np.array(self.gradient_norms)
-        
+        """Emit the training diagnostic (metrics schema).
+
+        Returns:
+            dict with ``n_logged_steps``, ``mean_param_grad_variance``,
+            ``std_param_grad_variance``, ``mean_abs_grad``, ``max_abs_grad`` and
+            the ``trajectory`` (step-index vs ``V̄^x``).
+        """
+        if self.is_empty:
+            return {
+                'n_logged_steps': 0,
+                'mean_param_grad_variance': 0.0,
+                'std_param_grad_variance': 0.0,
+                'mean_abs_grad': 0.0,
+                'max_abs_grad': 0.0,
+                'trajectory': {
+                    'step': [],
+                    'mean_param_grad_variance': [],
+                },
+            }
+
+        vbar_x = np.asarray(self._vbar_x, dtype=np.float64)
         return {
-            'mean_norm': float(np.mean(norms)),
-            'std_norm': float(np.std(norms)),
-            'variance': float(np.var(norms)),
-            'min_norm': float(np.min(norms)),
-            'max_norm': float(np.max(norms)),
-            'median_norm': float(np.median(norms)),
-            'total_updates': len(norms)
+            'n_logged_steps': len(self._steps),
+            'mean_param_grad_variance': float(np.mean(vbar_x)),
+            'std_param_grad_variance': float(np.std(vbar_x)),
+            'mean_abs_grad': float(np.mean(self._mean_abs_grad)),
+            'max_abs_grad': float(np.max(self._max_abs_grad)),
+            'trajectory': {
+                'step': list(self._steps),
+                'mean_param_grad_variance': list(self._vbar_x),
+            },
         }
-    
-    def detect_barren_plateau(self, window_size: int = 10) -> bool:
-        """
-        Detect if barren plateau is present.
-        
-        Args:
-            window_size: Number of recent gradients to check
-            
-        Returns:
-            True if barren plateau detected
-        """
-        if len(self.gradient_norms) < window_size:
-            return False
-        
-        recent_norms = self.gradient_norms[-window_size:]
-        mean_recent_norm = np.mean(recent_norms)
-        
-        return mean_recent_norm < self.barren_plateau_threshold
-    
-    def get_variance_trajectory(self, window_size: int = 50) -> List[float]:
-        """
-        Compute rolling variance of gradient norms.
-        
-        Args:
-            window_size: Window size for rolling variance
-            
-        Returns:
-            List of variance values
-        """
-        if len(self.gradient_norms) < window_size:
-            return []
-        
-        variances = []
-        for i in range(window_size, len(self.gradient_norms) + 1):
-            window = self.gradient_norms[i-window_size:i]
-            variances.append(np.var(window))
-        
-        return variances
+
+
+def landscape_variance(
+    grad_instances: Sequence,
+    n_bootstrap: int = _BOOTSTRAP_ITERATIONS,
+    seed: int = _BOOTSTRAP_SEED,
+    confidence_level: float = 0.95,
+) -> Dict:
+    """Landscape statistic ``V̄`` over random parameter draws.
+
+    Given ``R`` random instances of the cost-function gradient, each of length
+    ``P`` (one entry per trainable parameter), computes:
+
+    * ``V_j = Var_i[g_{i,j}]`` — variance over instances, per parameter;
+    * ``V̄ = mean_j V_j`` — the landscape statistic;
+    * Monte-Carlo uncertainty on ``V̄``: a nonparametric bootstrap
+      that **resamples the ``R`` instances** (the Monte-Carlo draws), recomputing
+      ``V̄`` each resample, reported as a bootstrap SE and a percentile CI.
+
+    Args:
+        grad_instances: Array of shape ``(R, P)``.
+        n_bootstrap: Number of bootstrap resamples (over instances).
+        seed: RNG seed for reproducibility of the bootstrap.
+        confidence_level: Coverage of the percentile CI (e.g. 0.95).
+
+    Returns:
+        dict with ``Vbar``, ``variance_per_parameter``, ``se``, ``ci``,
+        ``n_instances``, ``n_parameters``, ``n_bootstrap``.
+    """
+    if not 0.0 < confidence_level < 1.0:
+        raise ValueError(f"confidence_level must be in (0, 1), got {confidence_level}")
+    if n_bootstrap < 1:
+        raise ValueError(f"n_bootstrap must be >= 1, got {n_bootstrap}")
+
+    g = _validate_matrix(grad_instances, "grad_instances")
+    r, p = g.shape
+    v_j = np.var(g, axis=0)  # per-parameter variance over instances
+    vbar = float(np.mean(v_j))
+
+    rng = np.random.RandomState(seed)
+    alpha = 1.0 - confidence_level
+    boot = np.empty(n_bootstrap, dtype=np.float64)
+    for i in range(n_bootstrap):
+        idx = rng.randint(0, r, size=r)
+        boot[i] = np.mean(np.var(g[idx], axis=0))
+    se = float(np.std(boot))
+    lo, hi = np.percentile(boot, [100.0 * alpha / 2, 100.0 * (1 - alpha / 2)])
+
+    return {
+        'Vbar': vbar,
+        'variance_per_parameter': v_j.tolist(),
+        'se': se,
+        'ci': [float(lo), float(hi)],
+        'n_instances': int(r),
+        'n_parameters': int(p),
+        'n_bootstrap': int(n_bootstrap),
+    }
 
 
 def compute_accuracy(predictions: np.ndarray, labels: np.ndarray) -> float:
-    """
-    Compute classification accuracy.
-    
-    Args:
-        predictions: Model predictions (probabilities)
-        labels: Ground truth labels
-        
-    Returns:
-        Accuracy as percentage
-    """
+    """Classification accuracy as a fraction in ``[0, 1]``."""
     pred_labels = (predictions > 0.5).astype(int)
-    correct = np.sum(pred_labels == labels)
-    return (correct / len(labels)) * 100.0
-
-
-def compute_success_rate(accuracies: List[float], threshold: float = 90.0) -> float:
-    """
-    Compute success rate across multiple runs.
-    
-    Args:
-        accuracies: List of test accuracies from different runs
-        threshold: Minimum accuracy to count as success
-        
-    Returns:
-        Success rate as percentage
-    """
-    successes = sum(1 for acc in accuracies if acc >= threshold)
-    return (successes / len(accuracies)) * 100.0
+    if len(pred_labels) == 0:
+        raise ValueError("cannot compute accuracy on an empty batch")
+    return float(np.mean(pred_labels == labels))
 
 
 def compare_approaches(results_dict: Dict[str, Dict]) -> Dict:
-    """
-    Compare results from different training approaches.
-    
+    """Summarise per-approach results using the new metrics schema.
+
     Args:
-        results_dict: Dictionary mapping approach names to result dictionaries
-        
+        results_dict: Mapping of approach name -> trainer result dict.
+
     Returns:
-        Comparison summary
+        A per-approach summary plus ``summary`` with the best test accuracy.
     """
     comparison = {}
-    
     for name, results in results_dict.items():
+        diag = results.get('training_diagnostic', {}) or {}
         comparison[name] = {
-            'test_accuracy': results['test_acc'],
-            'training_time': results['training_time'],
-            'final_gradient_norm': results['gradient_stats'].get('mean_norm', 0),
-            'barren_plateau': results['barren_plateau_detected']
+            'test_acc': results.get('test_acc'),
+            'test_loss': results.get('test_loss'),
+            'training_time_seconds': results.get('training_time_seconds'),
+            'total_updates': results.get('total_updates'),
+            'n_parameters': diag.get('n_parameters'),
+            'mean_param_grad_variance': diag.get('mean_param_grad_variance'),
         }
-    
-    # Find best approach
-    best_acc = max(comparison.items(), key=lambda x: x[1]['test_accuracy'])
-    fastest = min(comparison.items(), key=lambda x: x[1]['training_time'])
-    
+
+    ranked = [
+        (name, entry) for name, entry in comparison.items()
+        if entry['test_acc'] is not None
+    ]
     comparison['summary'] = {
-        'best_accuracy': best_acc[0],
-        'fastest_training': fastest[0]
+        'best_test_acc': max(ranked, key=lambda x: x[1]['test_acc'])[0]
+        if ranked else None,
     }
-    
     return comparison
-
-
-if __name__ == "__main__":
-    # Test gradient tracker
-    tracker = GradientTracker()
-    
-    # Simulate barren plateau: gradients decay EXPONENTIALLY (not linearly)
-    # This mimics real deep quantum circuits where gradients vanish exponentially
-    print("Simulating barren plateau with exponentially decaying gradients...")
-    print("(Threshold for detection: 1e-6)\n")
-    
-    for i in range(100):
-        # Exponential decay: starts at ~1e-4, decays to ~1e-9 by epoch 100
-        # Higher decay rate (0.12) ensures gradients fall well below threshold (1e-6)
-        scale = 1e-4 * np.exp(-0.12 * i)
-        fake_gradients = [np.random.randn(10) * scale]
-        tracker.update(fake_gradients)
-        
-        # Print every 20 epochs to show decay
-        if i % 20 == 0:
-            grad_norm = np.linalg.norm(fake_gradients[0])
-            print(f"  Epoch {i:3d}: gradient norm = {grad_norm:.2e}")
-    
-    print()
-    stats = tracker.get_statistics()
-    print("Gradient Statistics:")
-    for key, value in stats.items():
-        print(f"  {key}: {value:.6f}")
-    
-    print(f"\nBarren plateau detected: {tracker.detect_barren_plateau()}")

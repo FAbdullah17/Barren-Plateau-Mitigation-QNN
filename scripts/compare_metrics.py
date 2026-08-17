@@ -2,8 +2,13 @@
 """
 Compare two metrics.json files for reproducibility testing.
 
+Compares test accuracy/loss, the gradient diagnostic (mean parameter-gradient
+variance), parameter count, update budget, seed triple, and the resolved
+config, using absolute/relative tolerances.
+
 Usage:
-    python scripts/compare_metrics.py results/run1/metrics.json results/run2/metrics.json
+    python scripts/compare_metrics.py results/baseline/depth_8/seed_0/metrics.json \
+        results/baseline/depth_8/seed_0/metrics.json
 """
 
 import json
@@ -13,141 +18,148 @@ from pathlib import Path
 
 
 def load_metrics(filepath: str) -> dict:
-    """Load metrics from JSON file."""
+    """Load metrics from a JSON file."""
     with open(filepath, 'r') as f:
         return json.load(f)
 
 
+def _relative_diff(a, b):
+    """Relative difference |a-b|/|a| (0 when a == 0)."""
+    if a == 0:
+        return abs(b)
+    return abs(a - b) / abs(a)
+
+
 def compare_metrics(metrics1: dict, metrics2: dict, tolerance: dict = None) -> list:
-    """
-    Compare two metrics dictionaries.
-    
-    Returns:
-        List of differences found
-    """
+    """Compare two metrics dicts; return the list of field comparisons."""
     if tolerance is None:
         tolerance = {
-            'test_acc': 0.001,      # 0.1% tolerance
-            'train_acc': 0.001,
-            'training_time': 0.1,   # 10% tolerance (relative)
-            'gradient_norm': 0.01   # 1% tolerance (relative)
+            'test_acc': 0.001,              # absolute
+            'test_loss': 0.05,              # relative
+            'mean_param_grad_variance': 0.05,  # relative
+            'training_time_seconds': 0.1,   # relative
         }
-    
+
     differences = []
-    
-    # Compare key metrics
-    acc_key1 = 'test_acc' if 'test_acc' in metrics1 else 'final_val_acc'
-    acc_key2 = 'test_acc' if 'test_acc' in metrics2 else 'final_val_acc'
-    
-    acc1 = metrics1.get(acc_key1, 0)
-    acc2 = metrics2.get(acc_key2, 0)
-    acc_diff = abs(acc1 - acc2)
-    
-    if acc_diff > tolerance['test_acc']:
+
+    # Structural identity (must match exactly).
+    for field, key in [('approach', 'config'), ('n_qubits', 'config'),
+                       ('n_layers', 'config')]:
+        v1 = metrics1['config'].get(field)
+        v2 = metrics2['config'].get(field)
         differences.append({
-            'field': 'test_accuracy',
-            'value1': acc1,
-            'value2': acc2,
-            'difference': acc_diff,
-            'threshold': tolerance['test_acc'],
-            'status': 'MISMATCH'
+            'field': f'config.{field}',
+            'value1': v1,
+            'value2': v2,
+            'status': 'MATCH' if v1 == v2 else 'MISMATCH',
         })
-    else:
+
+    for field in ('seed_index', 'total_updates', 'n_parameters'):
+        v1 = metrics1.get(field)
+        v2 = metrics2.get(field)
         differences.append({
-            'field': 'test_accuracy',
-            'value1': acc1,
-            'value2': acc2,
-            'difference': acc_diff,
-            'threshold': tolerance['test_acc'],
-            'status': 'MATCH'
+            'field': field,
+            'value1': v1,
+            'value2': v2,
+            'status': 'MATCH' if v1 == v2 else 'MISMATCH',
         })
-    
-    # Compare training time (relative difference)
-    time1 = metrics1.get('training_time', 0)
-    time2 = metrics2.get('training_time', 0)
-    if time1 > 0:
-        time_diff_rel = abs(time1 - time2) / time1
-    else:
-        time_diff_rel = 0
-    
+
+    # Test accuracy (absolute tolerance).
+    acc1 = metrics1['test_acc']
+    acc2 = metrics2['test_acc']
     differences.append({
-        'field': 'training_time',
+        'field': 'test_acc',
+        'value1': acc1,
+        'value2': acc2,
+        'difference': abs(acc1 - acc2),
+        'threshold': tolerance['test_acc'],
+        'status': 'MATCH' if abs(acc1 - acc2) <= tolerance['test_acc'] else 'MISMATCH',
+    })
+
+    # Test loss (relative tolerance).
+    loss1 = metrics1['test_loss']
+    loss2 = metrics2['test_loss']
+    loss_rel = _relative_diff(loss1, loss2)
+    differences.append({
+        'field': 'test_loss',
+        'value1': f"{loss1:.6f}",
+        'value2': f"{loss2:.6f}",
+        'difference': f"{loss_rel*100:.2f}%",
+        'threshold': f"{tolerance['test_loss']*100:.0f}%",
+        'status': 'MATCH' if loss_rel <= tolerance['test_loss'] else 'MISMATCH',
+    })
+
+    # Training time (relative tolerance).
+    time1 = metrics1['training_time_seconds']
+    time2 = metrics2['training_time_seconds']
+    time_rel = _relative_diff(time1, time2)
+    differences.append({
+        'field': 'training_time_seconds',
         'value1': f"{time1:.2f}s",
         'value2': f"{time2:.2f}s",
-        'difference': f"{time_diff_rel*100:.1f}%",
-        'threshold': f"{tolerance['training_time']*100:.0f}%",
-        'status': 'MATCH' if time_diff_rel <= tolerance['training_time'] else 'MISMATCH'
+        'difference': f"{time_rel*100:.1f}%",
+        'threshold': f"{tolerance['training_time_seconds']*100:.0f}%",
+        'status': 'MATCH' if time_rel <= tolerance['training_time_seconds'] else 'MISMATCH',
     })
-    
-    # Compare barren plateau detection
-    bp1 = metrics1.get('barren_plateau_detected', False)
-    bp2 = metrics2.get('barren_plateau_detected', False)
+
+    # Gradient diagnostic (relative tolerance).
+    pgv1 = metrics1['training_diagnostic']['mean_param_grad_variance']
+    pgv2 = metrics2['training_diagnostic']['mean_param_grad_variance']
+    pgv_rel = _relative_diff(pgv1, pgv2)
     differences.append({
-        'field': 'barren_plateau_detected',
-        'value1': bp1,
-        'value2': bp2,
-        'status': 'MATCH' if bp1 == bp2 else 'MISMATCH'
+        'field': 'mean_param_grad_variance',
+        'value1': f"{pgv1:.6e}",
+        'value2': f"{pgv2:.6e}",
+        'difference': f"{pgv_rel*100:.2f}%",
+        'threshold': f"{tolerance['mean_param_grad_variance']*100:.0f}%",
+        'status': 'MATCH' if pgv_rel <= tolerance['mean_param_grad_variance'] else 'MISMATCH',
     })
-    
-    # Compare gradient statistics
-    gs1 = metrics1.get('gradient_stats', {})
-    gs2 = metrics2.get('gradient_stats', {})
-    
-    mean_norm1 = gs1.get('mean_norm', 0)
-    mean_norm2 = gs2.get('mean_norm', 0)
-    
-    if mean_norm1 > 0:
-        norm_diff_rel = abs(mean_norm1 - mean_norm2) / mean_norm1
-    else:
-        norm_diff_rel = 0
-    
-    differences.append({
-        'field': 'mean_gradient_norm',
-        'value1': f"{mean_norm1:.6e}",
-        'value2': f"{mean_norm2:.6e}",
-        'difference': f"{norm_diff_rel*100:.1f}%",
-        'threshold': f"{tolerance['gradient_norm']*100:.0f}%",
-        'status': 'MATCH' if norm_diff_rel <= tolerance['gradient_norm'] else 'MISMATCH'
-    })
-    
+
     return differences
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Compare two experiment metrics for reproducibility')
+    parser = argparse.ArgumentParser(
+        description='Compare two experiment metrics for reproducibility'
+    )
     parser.add_argument('file1', type=str, help='First metrics.json file')
     parser.add_argument('file2', type=str, help='Second metrics.json file')
     parser.add_argument('--json', action='store_true', help='Output as JSON')
     args = parser.parse_args()
-    
-    # Validate files exist
+
     for filepath in [args.file1, args.file2]:
         if not Path(filepath).exists():
             print(f"ERROR: File not found: {filepath}")
             sys.exit(1)
-    
-    # Load metrics
+
     metrics1 = load_metrics(args.file1)
     metrics2 = load_metrics(args.file2)
-    
-    # Compare
+
+    for name, metrics in (('file1', metrics1), ('file2', metrics2)):
+        missing = [k for k in ('test_acc', 'test_loss', 'training_time_seconds',
+                               'total_updates', 'n_parameters',
+                               'training_diagnostic', 'config')
+                   if k not in metrics]
+        if missing:
+            print(f"ERROR: {name} is missing required fields: {missing}")
+            sys.exit(1)
+
     differences = compare_metrics(metrics1, metrics2)
-    
+
     if args.json:
         print(json.dumps(differences, indent=2))
         sys.exit(0)
-    
-    # Print comparison table
+
     print(f"\n{'='*70}")
     print(f"METRICS COMPARISON")
     print(f"{'='*70}")
     print(f"File 1: {args.file1}")
     print(f"File 2: {args.file2}")
     print(f"{'='*70}\n")
-    
-    print(f"{'Field':<25} {'Value 1':<15} {'Value 2':<15} {'Status':<10}")
-    print("-" * 70)
-    
+
+    print(f"{'Field':<28} {'Value 1':<20} {'Value 2':<20} {'Status':<10}")
+    print("-" * 78)
+
     all_match = True
     for diff in differences:
         status = diff['status']
@@ -156,11 +168,11 @@ def main():
             status_str = '✗ MISMATCH'
         else:
             status_str = '✓ MATCH'
-        
-        print(f"{diff['field']:<25} {str(diff['value1']):<15} {str(diff['value2']):<15} {status_str:<10}")
-    
-    print("-" * 70)
-    
+        print(f"{diff['field']:<28} {str(diff['value1']):<20} "
+              f"{str(diff['value2']):<20} {status_str:<10}")
+
+    print("-" * 78)
+
     if all_match:
         print("\n✓ Results are REPRODUCIBLE (within tolerance)")
         sys.exit(0)

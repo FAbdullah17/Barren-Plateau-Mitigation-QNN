@@ -1,161 +1,92 @@
-"""
-End-to-end pipeline test for Hybrid-QNN project.
+"""End-to-end pipeline smoke test.
 
-This script tests the complete workflow:
-1. Load MNIST data (3 vs 6)
-2. Encode as quantum circuits
-3. Train baseline QNN model
-4. Verify results
-
-Use small dataset and few epochs for quick verification.
+Loads MNIST 3-vs-6 through the fixed low-dimensional pipeline
+(28x28 -> 4x4 -> 16 dims -> train-only PCA -> n_components), encodes exactly
+``n_qubits`` features into circuits, and trains the baseline QNN for a few
+gradient steps to verify the whole stack runs end to end. Kept small for speed.
 """
 
-import os
-os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
-
+import pytest
+import numpy as np
 import tensorflow as tf
 import tensorflow_quantum as tfq
 import cirq
-import numpy as np
-from pathlib import Path
 
-# Import project modules
-from src.data.mnist_loader import load_mnist_binary, encode_data_for_qnn
-from src.models.quantum_circuit import QuantumCircuit, create_readout_operators
+from src.data import load_mnist_binary, prepare_features, encode_data_for_qnn
 from src.training.baseline_trainer import BaselineTrainer
 
-print("=" * 70)
-print("HYBRID-QNN END-TO-END PIPELINE TEST")
-print("=" * 70)
-
-# Configuration
 SEED = 42
-TRAIN_SIZE = 50  # Small for quick test
+TRAIN_SIZE = 50
 TEST_SIZE = 20
 N_QUBITS = 4
-N_LAYERS = 2  # Shallow for speed
-EPOCHS = 3
+N_LAYERS = 2
+TOTAL_UPDATES = 4
 BATCH_SIZE = 10
+LOG_FREQUENCY = 2
 
-print(f"\nConfiguration:")
-print(f"  - Train samples: {TRAIN_SIZE}")
-print(f"  - Test samples: {TEST_SIZE}")
-print(f"  - Circuit: {N_QUBITS} qubits, {N_LAYERS} layers")
-print(f"  - Training: {EPOCHS} epochs, batch size {BATCH_SIZE}")
 
-# Step 1: Load data
-print(f"\n{'='*70}")
-print("STEP 1: Loading MNIST data (digits 3 vs 6)...")
-print(f"{'='*70}")
-
-X_train, y_train, X_test, y_test = load_mnist_binary(
-    digit1=3,
-    digit2=6,
-    train_size=TRAIN_SIZE,
-    test_size=TEST_SIZE,
-    image_size=(4, 4),
-    seed=SEED
-)
-
-print(f"✓ Data loaded:")
-print(f"  - X_train: {X_train.shape}")
-print(f"  - y_train: {y_train.shape}, distribution: {np.bincount(y_train)}")
-print(f"  - X_test: {X_test.shape}")
-print(f"  - y_test: {y_test.shape}, distribution: {np.bincount(y_test)}")
-
-# Step 2: Create quantum circuits
-print(f"\n{'='*70}")
-print("STEP 2: Building quantum circuits...")
-print(f"{'='*70}")
-
-qc = QuantumCircuit(n_qubits=N_QUBITS, n_layers=N_LAYERS)
-circuit_template = qc.get_circuit()
-params = qc.get_parameters()
-
-print(f"✓ Circuit created:")
-print(f"  - Qubits: {N_QUBITS}")
-print(f"  - Layers: {N_LAYERS}")
-print(f"  - Parameters: {len(params)}")
-print(f"  - Gates: {len(circuit_template)}")
-
-# Step 3: Encode data as quantum circuits
-print(f"\n{'='*70}")
-print("STEP 3: Encoding data as quantum circuits...")
-print(f"{'='*70}")
-
-def encode_batch(X_batch, circuit, params):
-    """Encode classical data into quantum circuits."""
-    qubits = sorted(circuit.all_qubits())
+def _convert_to_circuits(data, n_qubits):
+    """Encode all n_qubits features; fail loudly on truncation."""
+    assert data.shape[1] == n_qubits
+    qubits = cirq.GridQubit.rect(1, n_qubits)
     circuits = []
-    
-    for x in X_batch:
-        # Amplitude encoding: rotation angles from pixel values
-        data_circuit = cirq.Circuit()
+    for sample in data:
+        circuit = cirq.Circuit()
+        angles = encode_data_for_qnn(sample)
         for i, qubit in enumerate(qubits):
-            angle = x[i] * np.pi  # Scale to [0, π]
-            data_circuit.append(cirq.ry(angle)(qubit))
-        
-        # Append the parameterized circuit
-        full_circuit = data_circuit + circuit
-        circuits.append(full_circuit)
-    
+            circuit.append(cirq.ry(angles[i])(qubit))
+        circuits.append(circuit)
     return tfq.convert_to_tensor(circuits)
 
-train_circuits = encode_batch(X_train, circuit_template, params)
-test_circuits = encode_batch(X_test, circuit_template, params)
 
-print(f"✓ Data encoded as quantum circuits:")
-print(f"  - Train circuits: {train_circuits.shape}")
-print(f"  - Test circuits: {test_circuits.shape}")
+def test_end_to_end_pipeline():
+    X_train, y_train, X_test, y_test = load_mnist_binary(
+        digit1=3,
+        digit2=6,
+        train_size=TRAIN_SIZE,
+        test_size=TEST_SIZE,
+        data_seed=SEED,
+    )
+    X_train, X_test, pca_info = prepare_features(
+        X_train, X_test, n_components=N_QUBITS
+    )
+    assert X_train.shape == (TRAIN_SIZE, N_QUBITS)
+    assert X_test.shape == (TEST_SIZE, N_QUBITS)
+    assert pca_info['n_components'] == N_QUBITS
 
-# Step 4: Train baseline model
-print(f"\n{'='*70}")
-print("STEP 4: Training baseline QNN model...")
-print(f"{'='*70}")
+    train_circuits = _convert_to_circuits(X_train, N_QUBITS)
+    test_circuits = _convert_to_circuits(X_test, N_QUBITS)
 
-trainer = BaselineTrainer(
-    n_qubits=N_QUBITS,
-    n_layers=N_LAYERS,
-    learning_rate=0.01,
-    batch_size=BATCH_SIZE,
-    local_cost=False,
-    seed=SEED
-)
+    trainer = BaselineTrainer(
+        n_qubits=N_QUBITS,
+        n_layers=N_LAYERS,
+        cost='global',
+        learning_rate=0.01,
+        batch_size=BATCH_SIZE,
+        total_updates=TOTAL_UPDATES,
+        log_frequency=LOG_FREQUENCY,
+        diagnostic_samples=10,
+        init_seed=SEED,
+        training_seed=SEED,
+    )
+    results = trainer.train(
+        train_circuits=train_circuits,
+        train_labels=y_train,
+        val_circuits=test_circuits,
+        val_labels=y_test,
+    )
 
-results = trainer.train(
-    train_circuits=train_circuits,
-    train_labels=y_train,
-    val_circuits=test_circuits,
-    val_labels=y_test,
-    epochs=EPOCHS
-)
+    for key in (
+        'config', 'total_updates', 'n_parameters', 'test_loss', 'test_acc',
+        'training_time_seconds', 'training_diagnostic', 'history',
+    ):
+        assert key in results, f"missing result key: {key}"
+    assert results['total_updates'] == TOTAL_UPDATES
+    assert len(results['history']['step']) == TOTAL_UPDATES
+    assert 0.0 <= float(results['test_acc']) <= 1.0
+    assert results['training_time_seconds'] > 0.0
+    assert results['training_diagnostic']['n_logged_steps'] >= 1
 
-# Step 5: Display results
-print(f"\n{'='*70}")
-print("STEP 5: Results Summary")
-print(f"{'='*70}")
 
-print(f"\n✓ Training completed successfully!")
-print(f"\nFinal Metrics:")
-print(f"  - Training Loss: {results['final_train_loss']:.4f}")
-print(f"  - Training Accuracy: {results['final_train_acc']:.4f}")
-print(f"  - Validation Loss: {results['final_val_loss']:.4f}")
-print(f"  - Validation Accuracy: {results['final_val_acc']:.4f}")
-print(f"  - Test Accuracy: {results['test_acc']:.4f}")
-print(f"  - Training Time: {results['training_time']:.2f}s")
-
-print(f"\nGradient Statistics:")
-grad_stats = results['gradient_stats']
-print(f"  - Mean gradient norm: {grad_stats['mean_norm']:.6f}")
-print(f"  - Gradient variance: {grad_stats['variance']:.6e}")
-print(f"  - Barren plateau detected: {results['barren_plateau_detected']}")
-
-print(f"\n{'='*70}")
-print("✅ END-TO-END PIPELINE TEST PASSED!")
-print(f"{'='*70}")
-print(f"\nAll core modules working:")
-print(f"  ✓ Data loading (mnist_loader.py)")
-print(f"  ✓ Circuit building (quantum_circuit.py)")
-print(f"  ✓ QNN model (qnn_model.py)")
-print(f"  ✓ Baseline training (baseline_trainer.py)")
-print(f"\n🎉 All infrastructure tests passed — ready for experiments!")
+if __name__ == "__main__":
+    pytest.main([__file__, "-v"])
