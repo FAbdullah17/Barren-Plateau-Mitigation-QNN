@@ -19,7 +19,7 @@
       "finetune_epochs": 10,
       "cost_function": "global",
       "local_cost": false,
-      "freezing_strategy": "immediate"
+      "curriculum_strategy": "immediate"
     },
     "data": {
       "dataset": "mnist",
@@ -60,20 +60,21 @@
       "log_frequency": 1
     }
   },
-  "final_train_loss": 0.5516841411590576,
-  "final_train_acc": 0.7230000495910645,
-  "final_val_loss": 0.5348240733146667,
-  "final_val_acc": 0.7799999713897705,
-  "test_loss": 0.5348240733146667,
-  "test_acc": 0.7799999713897705,
-  "training_time": 955.7050681114197,
+  "seed": 42,
+  "final_train_loss": 0.55473393201828,
+  "final_train_acc": 0.7220000624656677,
+  "final_val_loss": 0.5342933535575867,
+  "final_val_acc": 0.7749999761581421,
+  "test_loss": 0.5342933535575867,
+  "test_acc": 0.7749999761581421,
+  "training_time": 939.8201568126678,
   "gradient_stats": {
-    "mean_norm": 0.19493180513381958,
-    "std_norm": 0.14447051286697388,
-    "variance": 0.020871730521321297,
-    "min_norm": 0.000264730304479599,
-    "max_norm": 0.9622501134872437,
-    "median_norm": 0.16071158647537231,
+    "mean_norm": 0.20765851438045502,
+    "std_norm": 0.14208824932575226,
+    "variance": 0.02018907107412815,
+    "min_norm": 0.000244826078414917,
+    "max_norm": 1.0946413278579712,
+    "median_norm": 0.17779015004634857,
     "total_updates": 2500
   },
   "barren_plateau_detected": false
