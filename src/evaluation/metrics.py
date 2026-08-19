@@ -81,6 +81,24 @@ class GradientTracker:
     def is_empty(self) -> bool:
         return len(self._steps) == 0
 
+    def state_dict(self) -> Dict:
+        """Serializable snapshot of the accumulation (for checkpoints)."""
+        return {
+            key: list(getattr(self, key))
+            for key in (
+                '_steps', '_vbar_x', '_mean_abs_grad', '_max_abs_grad',
+                '_n_samples',
+            )
+        }
+
+    def restore_state(self, state: Dict) -> None:
+        """Reload a snapshot produced by ``state_dict`` (no-op if absent)."""
+        for key in (
+            '_steps', '_vbar_x', '_mean_abs_grad', '_max_abs_grad', '_n_samples',
+        ):
+            if key in state:
+                setattr(self, key, list(state[key]))
+
     def get_statistics(self) -> Dict:
         """Emit the training diagnostic (metrics schema).
 

@@ -8,6 +8,10 @@ consumes (split across its stages). The dataset is shuffled once with
 Every ``log_frequency`` steps the per-sample Jacobian ``(B, P)`` is computed
 on ``diagnostic_samples`` fixed training samples and fed to ``GradientTracker``
 (the training diagnostic). Results use the metrics schema.
+
+When ``checkpoint_dir`` is set, the model weights, Adam state, step counter and
+diagnostic accumulation are saved every ``checkpoint_frequency`` steps and a
+later call with the same seeds resumes exactly from the latest checkpoint.
 """
 
 import os
@@ -25,6 +29,7 @@ if str(project_root) not in sys.path:
 import tensorflow as tf
 import numpy as np
 import time
+import json
 from typing import Dict, Optional
 
 from src.models import QuantumNeuralNetwork
@@ -47,6 +52,8 @@ class BaselineTrainer:
         init_seed: Optional[int] = None,
         training_seed: Optional[int] = None,
         track_gradients: bool = True,
+        checkpoint_dir: Optional[str] = None,
+        checkpoint_frequency: int = 500,
     ):
         """
         Initialize the step-based baseline trainer.
@@ -65,6 +72,10 @@ class BaselineTrainer:
             init_seed: PQC parameter init seed (decoupled from training).
             training_seed: Dataset shuffle seed (decoupled from data/init).
             track_gradients: Compute the gradient diagnostic when True.
+            checkpoint_dir: Directory for resumable checkpoints (model
+                weights, optimizer state, step counter, diagnostic state).
+                When None, checkpoints are disabled.
+            checkpoint_frequency: Save a checkpoint every N gradient steps.
         """
         if cost not in ('global', 'local'):
             raise ValueError(f"cost must be 'global' or 'local', got {cost!r}")
@@ -75,6 +86,10 @@ class BaselineTrainer:
         if diagnostic_samples < 1:
             raise ValueError(
                 f"diagnostic_samples must be >= 1, got {diagnostic_samples}"
+            )
+        if checkpoint_frequency < 0:
+            raise ValueError(
+                f"checkpoint_frequency must be >= 0, got {checkpoint_frequency}"
             )
 
         self.n_qubits = n_qubits
@@ -88,6 +103,8 @@ class BaselineTrainer:
         self.init_seed = init_seed
         self.training_seed = training_seed
         self.track_gradients = track_gradients
+        self.checkpoint_dir = checkpoint_dir
+        self.checkpoint_frequency = checkpoint_frequency
 
         if training_seed is not None:
             tf.random.set_seed(training_seed)
@@ -112,6 +129,16 @@ class BaselineTrainer:
         self._diag_circuits = None
         self._diag_labels = None
 
+        # Resumable checkpoint state (model + optimizer + step + diagnostic).
+        self._ckpt = None
+        self._step_var = None
+        if checkpoint_dir and checkpoint_frequency > 0:
+            Path(checkpoint_dir).mkdir(parents=True, exist_ok=True)
+            self._step_var = tf.Variable(0, dtype=tf.int64)
+            self._ckpt = tf.train.Checkpoint(
+                model=self.model, optimizer=self.optimizer, step=self._step_var
+            )
+
     def train(
         self,
         train_circuits: tf.Tensor,
@@ -135,6 +162,9 @@ class BaselineTrainer:
         if n_train < 1:
             raise ValueError("train_labels must not be empty")
 
+        # Resume from the latest checkpoint if one exists.
+        completed = self._restore_checkpoint()
+
         # Dataset shuffled once with training_seed, then repeated and batched.
         train_dataset = tf.data.Dataset.from_tensor_slices(
             (train_circuits, train_labels)
@@ -144,7 +174,9 @@ class BaselineTrainer:
             seed=self.training_seed,
             reshuffle_each_iteration=False,
         ).repeat().batch(self.batch_size)
-        train_dataset = train_dataset.take(self.total_updates)
+        if completed > 0:
+            train_dataset = train_dataset.skip(completed)
+        train_dataset = train_dataset.take(self.total_updates - completed)
 
         # Fixed diagnostic samples (stable Jacobian estimate).
         self._diag_circuits = train_circuits[: self.diagnostic_samples]
@@ -160,7 +192,8 @@ class BaselineTrainer:
         }
 
         start_time = time.time()
-        for step, (batch_circuits, batch_labels) in enumerate(train_dataset):
+        for i, (batch_circuits, batch_labels) in enumerate(train_dataset):
+            step = completed + i
             loss, acc = self._train_step(batch_circuits, batch_labels)
             history['step'].append(step)
             history['train_loss'].append(float(loss))
@@ -173,6 +206,12 @@ class BaselineTrainer:
                 history['val_acc'].append(float(val_acc))
                 if self.track_gradients:
                     self._log_diagnostic(step + 1)
+
+            if (
+                self._ckpt is not None
+                and (step + 1) % self.checkpoint_frequency == 0
+            ):
+                self._save_checkpoint(step + 1)
 
         training_time = time.time() - start_time
 
@@ -244,6 +283,52 @@ class BaselineTrainer:
         loss = self.loss_fn(labels, predictions)
         accuracy = self._batch_accuracy(predictions, labels)
         return float(loss.numpy()), float(accuracy.numpy())
+
+    def _restore_checkpoint(self) -> int:
+        """Restore the latest checkpoint; returns completed gradient steps.
+
+        Restores model weights, Adam state, the step counter, and the
+        diagnostic accumulation so a resumed run is identical to a
+        never-interrupted one.
+        """
+        if self._ckpt is None:
+            return 0
+        latest = tf.train.latest_checkpoint(self.checkpoint_dir)
+        if latest is None:
+            print(f"No checkpoint found in {self.checkpoint_dir}; starting fresh")
+            return 0
+        self._ckpt.restore(latest)
+        completed = int(self._step_var.numpy())
+        self._restore_tracker()
+        print(
+            f"Resuming from step {completed} of {self.total_updates} "
+            f"(checkpoint {latest})"
+        )
+        return completed
+
+    def _save_checkpoint(self, completed_steps: int) -> None:
+        """Persist model + optimizer + step + diagnostic accumulation."""
+        self._step_var.assign(completed_steps)
+        prefix = os.path.join(self.checkpoint_dir, 'ckpt')
+        self._ckpt.save(file_prefix=prefix)
+        self._save_tracker()
+        print(f"Checkpoint saved at step {completed_steps}")
+
+    def _save_tracker(self) -> None:
+        """Persist the diagnostic accumulation alongside the checkpoint."""
+        state = self.gradient_tracker.state_dict()
+        tmp = os.path.join(self.checkpoint_dir, 'tracker.json.tmp')
+        with open(tmp, 'w') as f:
+            json.dump(state, f)
+        os.replace(tmp, os.path.join(self.checkpoint_dir, 'tracker.json'))
+
+    def _restore_tracker(self) -> None:
+        """Reload the diagnostic accumulation (no-op if absent)."""
+        path = os.path.join(self.checkpoint_dir, 'tracker.json')
+        if not os.path.exists(path):
+            return
+        with open(path, 'r') as f:
+            self.gradient_tracker.restore_state(json.load(f))
 
     @staticmethod
     def _batch_accuracy(predictions, labels):

@@ -9,6 +9,7 @@ MAX_LAYERS = 20
 # Training / Metrics Defaults
 DEFAULT_LOG_FREQUENCY = 10
 DEFAULT_DIAGNOSTIC_SAMPLES = 100
+DEFAULT_CHECKPOINT_FREQUENCY = 500
 
 # Supported Approaches
 APPROACHES = ["baseline", "layerwise", "local_cost"]

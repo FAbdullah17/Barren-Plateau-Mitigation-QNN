@@ -43,3 +43,4 @@ analysis:
 output:
   results_dir: results/local_cost/depth_4
   save_plot: true
+  checkpoint_frequency: 500

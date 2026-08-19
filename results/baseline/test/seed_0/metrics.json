@@ -17,7 +17,7 @@
   "n_parameters": 32,
   "test_loss": 0.710772693157196,
   "test_acc": 0.7599999904632568,
-  "training_time_seconds": 48.682295083999634,
+  "training_time_seconds": 58.5754976272583,
   "training_diagnostic": {
     "n_logged_steps": 4,
     "mean_param_grad_variance": 0.018442691934534124,

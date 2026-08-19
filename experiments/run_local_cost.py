@@ -18,6 +18,7 @@ import argparse
 
 from experiments.common import (
     load_and_prepare, save_run, print_run_header,
+    run_is_complete, seed_checkpoint_dir,
 )
 from src.utils.config_validator import load_config, validate_config, derive_seed_triple
 from src.training import BaselineTrainer
@@ -43,6 +44,13 @@ def main():
         )
     seed_triple = derive_seed_triple(config['seeds']['base_seed'], args.seed_index)
 
+    if run_is_complete(config['output']['results_dir'], args.seed_index):
+        print(
+            f"Seed index {args.seed_index} already complete; skipping "
+            f"(delete seed_{args.seed_index}/metrics.json to re-run)."
+        )
+        return
+
     print_run_header('local_cost', config, args.seed_index, seed_triple)
 
     train_circuits, y_train, test_circuits, y_test, pca_info = load_and_prepare(
@@ -61,6 +69,10 @@ def main():
         init_seed=seed_triple['init_seed'],
         training_seed=seed_triple['training_seed'],
         track_gradients=config['metrics']['track_gradients'],
+        checkpoint_dir=str(
+            seed_checkpoint_dir(config['output']['results_dir'], args.seed_index)
+        ),
+        checkpoint_frequency=config['output']['checkpoint_frequency'],
     )
 
     results = trainer.train(

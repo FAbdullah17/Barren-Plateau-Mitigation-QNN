@@ -28,6 +28,7 @@ if str(project_root) not in sys.path:
 import tensorflow as tf
 import numpy as np
 import time
+import json
 from typing import Dict, Optional
 
 from src.models import LayerwiseQNN
@@ -79,6 +80,8 @@ class LayerwiseTrainer:
         init_seed: Optional[int] = None,
         training_seed: Optional[int] = None,
         track_gradients: bool = True,
+        checkpoint_dir: Optional[str] = None,
+        checkpoint_frequency: int = 500,
     ):
         """
         Initialize the step-based layerwise trainer.
@@ -96,6 +99,12 @@ class LayerwiseTrainer:
             init_seed: Base seed for per-layer parameter initialization.
             training_seed: Dataset shuffle seed (decoupled).
             track_gradients: Compute the gradient diagnostic when True.
+            checkpoint_dir: Directory for resumable phase checkpoints. Staged
+                parameter values and the diagnostic accumulation are persisted
+                after every phase (each phase is short), so an interrupted run
+                resumes at the last phase boundary. ``checkpoint_frequency`` is
+                accepted for API consistency but not used here.
+            checkpoint_frequency: Ignored (see ``checkpoint_dir``).
         """
         if cost not in ('global', 'local'):
             raise ValueError(f"cost must be 'global' or 'local', got {cost!r}")
@@ -117,6 +126,7 @@ class LayerwiseTrainer:
         self.init_seed = init_seed
         self.training_seed = training_seed
         self.track_gradients = track_gradients
+        self.checkpoint_dir = checkpoint_dir
 
         self.budget = compute_layerwise_budget(total_updates, n_layers)
 
@@ -170,7 +180,21 @@ class LayerwiseTrainer:
         self._diag_circuits = train_circuits[: self.diagnostic_samples]
         self._diag_labels = train_labels[: self.diagnostic_samples]
 
-        # Shared, once-shuffled dataset; each phase takes its budget from it.
+        # Resume at the last phase boundary (staged values + diagnostic).
+        start_layer, resumed = self._restore_phase_state()
+        if resumed:
+            print(
+                f"Resuming layerwise training from layer {start_layer} "
+                f"of {self.n_layers}"
+            )
+
+        per_stage = self.budget['per_stage']
+        completed_steps = start_layer * per_stage
+
+        # Shared, once-shuffled dataset. Each phase creates its own iterator
+        # (the shuffle buffer re-initializes per phase), so no positional skip
+        # is applied on resume: phases always read the same batches, matching
+        # an uninterrupted run exactly.
         train_dataset = tf.data.Dataset.from_tensor_slices(
             (train_circuits, train_labels)
         )
@@ -190,11 +214,10 @@ class LayerwiseTrainer:
         }
 
         start_time = time.time()
-        step = 0
+        step = completed_steps
 
         # Staged phase: one layer at a time, earlier layers baked in and frozen.
-        per_stage = self.budget['per_stage']
-        for _ in range(self.n_layers):
+        for _ in range(start_layer, self.n_layers):
             model = self.qnn.add_layer()
             optimizer = tf.keras.optimizers.Adam(learning_rate=self.learning_rate)
             self._run_steps(
@@ -202,6 +225,8 @@ class LayerwiseTrainer:
             )
             step += per_stage
             self.qnn.store_current_params()
+            self._save_phase_state()
+            self._save_tracker()
 
         # Fine-tune phase: full ansatz initialized from the staged values.
         finetune_updates = self.budget['finetune']
@@ -301,6 +326,69 @@ class LayerwiseTrainer:
         self.gradient_tracker.update(
             jacobian.numpy(), step=step, samples=self._diag_circuits.shape[0]
         )
+
+    def _save_phase_state(self) -> None:
+        """Persist staged parameter values and completed-layer count."""
+        if self.checkpoint_dir is None:
+            return
+        state_path = Path(self.checkpoint_dir) / 'phase_state.json'
+        state_path.parent.mkdir(parents=True, exist_ok=True)
+
+        arrays = {
+            f'layer_{k}': self.qnn.param_values[k]
+            for k in range(self.qnn.current_layers)
+            if self.qnn.param_values[k] is not None
+        }
+        np.savez(os.path.join(self.checkpoint_dir, 'param_values.npz'), **arrays)
+
+        payload = {'completed_layers': self.qnn.current_layers}
+        tmp = state_path.with_suffix('.json.tmp')
+        with open(tmp, 'w') as f:
+            json.dump(payload, f)
+        os.replace(tmp, state_path)
+
+    def _restore_phase_state(self) -> tuple:
+        """Reload staged values at the last phase boundary.
+
+        Returns:
+            ``(start_layer, resumed)`` — the layer index to continue from and
+            whether a saved state was found.
+        """
+        if self.checkpoint_dir is None:
+            return 0, False
+        state_path = Path(self.checkpoint_dir) / 'phase_state.json'
+        param_path = Path(self.checkpoint_dir) / 'param_values.npz'
+        if not state_path.exists() or not param_path.exists():
+            return 0, False
+
+        with open(state_path, 'r') as f:
+            payload = json.load(f)
+        completed = int(payload['completed_layers'])
+
+        loaded = np.load(param_path)
+        for k in range(completed):
+            self.qnn.param_values[k] = np.asarray(
+                loaded[f'layer_{k}'], dtype=np.float32
+            )
+        self.qnn.current_layers = completed
+
+        tracker_path = Path(self.checkpoint_dir) / 'tracker.json'
+        if tracker_path.exists():
+            with open(tracker_path, 'r') as f:
+                self.gradient_tracker.restore_state(json.load(f))
+        return completed, True
+
+    def _save_tracker(self) -> None:
+        """Persist the diagnostic accumulation at each phase boundary."""
+        if self.checkpoint_dir is None:
+            return
+        state = self.gradient_tracker.state_dict()
+        path = Path(self.checkpoint_dir) / 'tracker.json'
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix('.json.tmp')
+        with open(tmp, 'w') as f:
+            json.dump(state, f)
+        os.replace(tmp, path)
 
     def _evaluate(self, model, circuits, labels):
         """Return (loss, accuracy) on the given data."""

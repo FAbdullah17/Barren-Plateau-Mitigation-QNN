@@ -25,6 +25,14 @@ def load_seed_triples(config_path: str) -> int:
     return int(config['seeds']['seed_triples'])
 
 
+def is_complete(config_path: str, seed_index: int) -> bool:
+    """True if a finished metrics.json exists for this seed index."""
+    with open(config_path, 'r') as f:
+        config = yaml.safe_load(f)
+    results_dir = config['output']['results_dir']
+    return (Path(results_dir) / f'seed_{seed_index}' / 'metrics.json').exists()
+
+
 def run_experiment(approach: str, config_path: str, seed_index: int) -> bool:
     """Run a single experiment (one seed-triple index)."""
     script_map = {
@@ -68,6 +76,8 @@ def main():
     )
     parser.add_argument('--continue-on-error', action='store_true',
                         help='Continue running even if one seed fails')
+    parser.add_argument('--no-skip', action='store_true',
+                        help='Re-run seeds whose metrics.json already exists')
     args = parser.parse_args()
 
     if args.seed_indices is None:
@@ -93,6 +103,11 @@ def main():
     failed = 0
 
     for i, seed_index in enumerate(args.seed_indices, 1):
+        if not args.no_skip and is_complete(args.config, seed_index):
+            print(f"\n[{i}/{len(args.seed_indices)}] Seed-index {seed_index} "
+                  f"already complete; skipping")
+            continue
+
         print(f"\n[{i}/{len(args.seed_indices)}] Running seed-index {seed_index}")
 
         success = run_experiment(args.approach, args.config, seed_index)

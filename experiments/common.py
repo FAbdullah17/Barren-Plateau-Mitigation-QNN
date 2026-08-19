@@ -151,3 +151,13 @@ def print_run_header(approach: str, config: dict, seed_index: int, seed_triple: 
     print(f"  data_seed={seed_triple['data_seed']}  init_seed={seed_triple['init_seed']}  "
           f"training_seed={seed_triple['training_seed']}")
     print(f"  Train size: {data['train_size']}   Test size: {data['test_size']}")
+
+
+def run_is_complete(results_dir: str, seed_index: int) -> bool:
+    """True if a finished metrics.json already exists for this seed index."""
+    return (Path(results_dir) / f'seed_{seed_index}' / 'metrics.json').exists()
+
+
+def seed_checkpoint_dir(results_dir: str, seed_index: int) -> Path:
+    """Per-seed checkpoint directory (created by the trainer on demand)."""
+    return Path(results_dir) / f'seed_{seed_index}' / 'checkpoint'

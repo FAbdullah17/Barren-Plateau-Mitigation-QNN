@@ -55,6 +55,7 @@ class TestValidConfig:
         assert resolved['metrics']['track_gradients'] is True
         assert resolved['analysis']['multiple_comparison'] == 'holm'
         assert resolved['analysis']['alpha'] == 0.05
+        assert resolved['output']['checkpoint_frequency'] == 500
 
     def test_approach_must_match(self):
         cfg = _valid_config()

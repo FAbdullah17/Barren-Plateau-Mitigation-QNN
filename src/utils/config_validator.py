@@ -12,7 +12,8 @@ The experiment config is a nested YAML document with fixed sections:
     metrics:    {track_gradients, log_frequency, diagnostic_samples}   (optional)
     analysis:   {min_variance_separation_se, qubit_counts,
                  alpha, multiple_comparison}                         (optional)
-    output:     {results_dir, save_plot}
+    output:     {results_dir, save_plot, checkpoint_frequency}   (checkpoint
+                 frequency optional)
 
 Unknown sections, unknown keys inside known sections, and any legacy keys
 (``shots``, ``backend``, ``success_threshold``, ``local_cost``, ``epochs``,
@@ -29,6 +30,7 @@ from .constants import (
     MIN_QUBITS, MAX_QUBITS, MIN_LAYERS, MAX_LAYERS,
     APPROACHES,
     DEFAULT_LOG_FREQUENCY, DEFAULT_DIAGNOSTIC_SAMPLES,
+    DEFAULT_CHECKPOINT_FREQUENCY,
 )
 
 logger = logging.getLogger(__name__)
@@ -66,7 +68,7 @@ SECTION_KEYS = {
         'min_variance_separation_se', 'qubit_counts',
         'alpha', 'multiple_comparison',
     },
-    'output': {'results_dir', 'save_plot'},
+    'output': {'results_dir', 'save_plot', 'checkpoint_frequency'},
 }
 
 # Defaults for the optional analysis block.
@@ -144,14 +146,7 @@ def validate_config(
     analysis = config.get('analysis')
     resolved['analysis'] = _validate_analysis(analysis)
 
-    output = config.get('output')
-    if not isinstance(output, dict) or 'results_dir' not in output:
-        raise ConfigValidationError("output.results_dir is required")
-    results_dir = output['results_dir']
-    if not isinstance(results_dir, str) or not results_dir.strip():
-        raise ConfigValidationError(
-            f"output.results_dir must be a non-empty string, got {results_dir!r}"
-        )
+    resolved['output'] = _validate_output(config.get('output'))
 
     logger.info("Configuration validation passed")
     return resolved
@@ -407,3 +402,32 @@ def _validate_analysis(analysis: Any) -> Dict[str, Any]:
     if not isinstance(analysis, dict):
         raise ConfigValidationError("analysis must be a mapping")
     return {**DEFAULT_ANALYSIS, **analysis}
+
+
+def _validate_output(output: Any) -> Dict[str, Any]:
+    if not isinstance(output, dict) or 'results_dir' not in output:
+        raise ConfigValidationError("output.results_dir is required")
+    results_dir = output['results_dir']
+    if not isinstance(results_dir, str) or not results_dir.strip():
+        raise ConfigValidationError(
+            f"output.results_dir must be a non-empty string, got {results_dir!r}"
+        )
+
+    checkpoint_frequency = output.get(
+        'checkpoint_frequency', DEFAULT_CHECKPOINT_FREQUENCY
+    )
+    if (
+        not isinstance(checkpoint_frequency, int)
+        or isinstance(checkpoint_frequency, bool)
+        or checkpoint_frequency < 0
+    ):
+        raise ConfigValidationError(
+            f"output.checkpoint_frequency must be an integer >= 0 "
+            f"(0 disables checkpoints), got {checkpoint_frequency!r}"
+        )
+
+    return {
+        'results_dir': results_dir,
+        'save_plot': output.get('save_plot', True),
+        'checkpoint_frequency': checkpoint_frequency,
+    }

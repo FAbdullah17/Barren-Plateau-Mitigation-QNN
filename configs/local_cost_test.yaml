@@ -37,3 +37,4 @@ metrics:
 output:
   results_dir: results/local_cost/test
   save_plot: true
+  checkpoint_frequency: 20
