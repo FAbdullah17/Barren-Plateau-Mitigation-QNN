@@ -26,3 +26,21 @@ WARNING:tensorflow:6 out of the last 6 calls to <function pfor.<locals>.f at 0x7
 Checkpoint saved at step 500
 18:45:45 - absl - INFO - Sharding callback duration: 29
 Checkpoint saved at step 1000
+19:18:09 - absl - INFO - Sharding callback duration: 81
+Checkpoint saved at step 1500
+19:48:00 - absl - INFO - Sharding callback duration: 11
+Checkpoint saved at step 2000
+20:16:20 - absl - INFO - Sharding callback duration: 10
+Checkpoint saved at step 2500
+Saved plot to results/baseline/depth_6/seed_0/training_history.png
+
+======================================================================
+EXPERIMENT SUMMARY
+======================================================================
+  Test accuracy: 86.00%
+  Test loss:     0.3517
+  Training time: 8749.99s
+  Mean param-gradient variance: 5.503e-03
+  n_parameters:  96
+  Metrics saved to: results/baseline/depth_6/seed_0/metrics.json
+======================================================================
