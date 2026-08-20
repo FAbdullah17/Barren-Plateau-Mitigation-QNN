@@ -1,0 +1,28 @@
+2026-08-20 17:50:18.129215: E external/local_xla/xla/stream_executor/cuda/cuda_fft.cc:479] Unable to register cuFFT factory: Attempting to register factory for plugin cuFFT when one has already been registered
+2026-08-20 17:50:18.221872: E external/local_xla/xla/stream_executor/cuda/cuda_dnn.cc:10575] Unable to register cuDNN factory: Attempting to register factory for plugin cuDNN when one has already been registered
+2026-08-20 17:50:18.222024: E external/local_xla/xla/stream_executor/cuda/cuda_blas.cc:1442] Unable to register cuBLAS factory: Attempting to register factory for plugin cuBLAS when one has already been registered
+17:50:28 - src.utils.config_validator - INFO - Configuration validation passed
+======================================================================
+BASELINE EXPERIMENT
+======================================================================
+  Layers: 6   Qubits: 8
+  Cost function: global
+  Total updates: 2500
+  Learning rate: 0.01   Batch size: 20
+  Seed index: 0
+  data_seed=42  init_seed=43  training_seed=44
+  Train size: 1000   Test size: 200
+No checkpoint found in results/baseline/depth_6/seed_0/checkpoint; starting fresh
+2026-08-20 17:50:32.921620: E tensorflow/core/util/util.cc:131] oneDNN supports DT_STRING only on platforms with AVX-512. Falling back to the default Eigen-based implementation if present.
+WARNING: All log messages before absl::InitializeLog() is called are written to STDERR
+I0000 00:00:1787230234.739205    2286 service.cc:145] XLA service 0x59f7e5287b20 initialized for platform CUDA (this does not guarantee that XLA will be used). Devices:
+I0000 00:00:1787230234.739306    2286 service.cc:153]   StreamExecutor device (0): NVIDIA GeForce GTX 1650, Compute Capability 7.5
+I0000 00:00:1787230234.855593    2286 device_compiler.h:188] Compiled cluster using XLA!  This line is logged at most once for the lifetime of the process.
+WARNING:tensorflow:5 out of the last 5 calls to <function pfor.<locals>.f at 0x756465ef34c0> triggered tf.function retracing. Tracing is expensive and the excessive number of tracings could be due to (1) creating @tf.function repeatedly in a loop, (2) passing tensors with different shapes, (3) passing Python objects instead of tensors. For (1), please define your @tf.function outside of the loop. For (2), @tf.function has reduce_retracing=True option that can avoid unnecessary retracing. For (3), please refer to https://www.tensorflow.org/guide/function#controlling_retracing and https://www.tensorflow.org/api_docs/python/tf/function for  more details.
+17:53:35 - tensorflow - WARNING - 5 out of the last 5 calls to <function pfor.<locals>.f at 0x756465ef34c0> triggered tf.function retracing. Tracing is expensive and the excessive number of tracings could be due to (1) creating @tf.function repeatedly in a loop, (2) passing tensors with different shapes, (3) passing Python objects instead of tensors. For (1), please define your @tf.function outside of the loop. For (2), @tf.function has reduce_retracing=True option that can avoid unnecessary retracing. For (3), please refer to https://www.tensorflow.org/guide/function#controlling_retracing and https://www.tensorflow.org/api_docs/python/tf/function for  more details.
+WARNING:tensorflow:6 out of the last 6 calls to <function pfor.<locals>.f at 0x756465ef34c0> triggered tf.function retracing. Tracing is expensive and the excessive number of tracings could be due to (1) creating @tf.function repeatedly in a loop, (2) passing tensors with different shapes, (3) passing Python objects instead of tensors. For (1), please define your @tf.function outside of the loop. For (2), @tf.function has reduce_retracing=True option that can avoid unnecessary retracing. For (3), please refer to https://www.tensorflow.org/guide/function#controlling_retracing and https://www.tensorflow.org/api_docs/python/tf/function for  more details.
+17:54:09 - tensorflow - WARNING - 6 out of the last 6 calls to <function pfor.<locals>.f at 0x756465ef34c0> triggered tf.function retracing. Tracing is expensive and the excessive number of tracings could be due to (1) creating @tf.function repeatedly in a loop, (2) passing tensors with different shapes, (3) passing Python objects instead of tensors. For (1), please define your @tf.function outside of the loop. For (2), @tf.function has reduce_retracing=True option that can avoid unnecessary retracing. For (3), please refer to https://www.tensorflow.org/guide/function#controlling_retracing and https://www.tensorflow.org/api_docs/python/tf/function for  more details.
+18:19:25 - absl - INFO - Sharding callback duration: 22
+Checkpoint saved at step 500
+18:45:45 - absl - INFO - Sharding callback duration: 29
+Checkpoint saved at step 1000
