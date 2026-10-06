@@ -1,0 +1,33 @@
+2026-10-03 19:02:42.421546: E external/local_xla/xla/stream_executor/cuda/cuda_fft.cc:479] Unable to register cuFFT factory: Attempting to register factory for plugin cuFFT when one has already been registered
+2026-10-03 19:02:42.438457: E external/local_xla/xla/stream_executor/cuda/cuda_dnn.cc:10575] Unable to register cuDNN factory: Attempting to register factory for plugin cuDNN when one has already been registered
+2026-10-03 19:02:42.438544: E external/local_xla/xla/stream_executor/cuda/cuda_blas.cc:1442] Unable to register cuBLAS factory: Attempting to register factory for plugin cuBLAS when one has already been registered
+2026-10-03 19:02:48.492540: E external/local_xla/xla/stream_executor/cuda/cuda_driver.cc:282] failed call to cuInit: CUDA_ERROR_NO_DEVICE: no CUDA-capable device is detected
+19:02:49 - src.utils.config_validator - INFO - Configuration validation passed
+======================================================================
+LAYERWISE EXPERIMENT
+======================================================================
+  Layers: 6   Qubits: 8
+  Cost function: global
+  Total updates: 2500
+  Learning rate: 0.01   Batch size: 20
+  Seed index: 9
+  data_seed=69  init_seed=70  training_seed=71
+  Train size: 1000   Test size: 200
+2026-10-03 19:02:53.977760: E tensorflow/core/util/util.cc:131] oneDNN supports DT_STRING only on platforms with AVX-512. Falling back to the default Eigen-based implementation if present.
+WARNING:tensorflow:5 out of the last 5 calls to <function pfor.<locals>.f at 0x7ef8332e5d00> triggered tf.function retracing. Tracing is expensive and the excessive number of tracings could be due to (1) creating @tf.function repeatedly in a loop, (2) passing tensors with different shapes, (3) passing Python objects instead of tensors. For (1), please define your @tf.function outside of the loop. For (2), @tf.function has reduce_retracing=True option that can avoid unnecessary retracing. For (3), please refer to https://www.tensorflow.org/guide/function#controlling_retracing and https://www.tensorflow.org/api_docs/python/tf/function for  more details.
+19:03:04 - tensorflow - WARNING - 5 out of the last 5 calls to <function pfor.<locals>.f at 0x7ef8332e5d00> triggered tf.function retracing. Tracing is expensive and the excessive number of tracings could be due to (1) creating @tf.function repeatedly in a loop, (2) passing tensors with different shapes, (3) passing Python objects instead of tensors. For (1), please define your @tf.function outside of the loop. For (2), @tf.function has reduce_retracing=True option that can avoid unnecessary retracing. For (3), please refer to https://www.tensorflow.org/guide/function#controlling_retracing and https://www.tensorflow.org/api_docs/python/tf/function for  more details.
+WARNING:tensorflow:6 out of the last 6 calls to <function pfor.<locals>.f at 0x7ef8332e5d00> triggered tf.function retracing. Tracing is expensive and the excessive number of tracings could be due to (1) creating @tf.function repeatedly in a loop, (2) passing tensors with different shapes, (3) passing Python objects instead of tensors. For (1), please define your @tf.function outside of the loop. For (2), @tf.function has reduce_retracing=True option that can avoid unnecessary retracing. For (3), please refer to https://www.tensorflow.org/guide/function#controlling_retracing and https://www.tensorflow.org/api_docs/python/tf/function for  more details.
+19:03:06 - tensorflow - WARNING - 6 out of the last 6 calls to <function pfor.<locals>.f at 0x7ef8332e5d00> triggered tf.function retracing. Tracing is expensive and the excessive number of tracings could be due to (1) creating @tf.function repeatedly in a loop, (2) passing tensors with different shapes, (3) passing Python objects instead of tensors. For (1), please define your @tf.function outside of the loop. For (2), @tf.function has reduce_retracing=True option that can avoid unnecessary retracing. For (3), please refer to https://www.tensorflow.org/guide/function#controlling_retracing and https://www.tensorflow.org/api_docs/python/tf/function for  more details.
+Saved plot to results/layerwise/depth_6/seed_9/training_history.png
+
+======================================================================
+EXPERIMENT SUMMARY
+======================================================================
+  Test accuracy: 86.50%
+  Test loss:     0.3440
+  Training time: 2092.61s
+  Budget split:  {'per_stage': 357, 'finetune': 358}
+  Mean param-gradient variance: 5.569e-03
+  n_parameters:  96
+  Metrics saved to: results/layerwise/depth_6/seed_9/metrics.json
+======================================================================

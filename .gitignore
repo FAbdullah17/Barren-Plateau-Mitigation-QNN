@@ -14,3 +14,4 @@ docs/AUDIT_FINDINGS.md
 docs/IMPLEMENTATION_PLAN.md
 logs/
 results/archive/
+/.python-version
