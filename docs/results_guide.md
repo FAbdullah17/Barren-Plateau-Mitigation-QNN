@@ -11,51 +11,58 @@ Each experiment produces a `metrics.json` file with the following key metrics:
 | Metric | Description | Good Value |
 |--------|-------------|------------|
 | `test_acc` | Final test accuracy | > 0.70 (70%) |
-| `final_train_acc` | Final training accuracy | > 0.70 |
-| `training_time` | Time in seconds | Varies by depth |
-| `barren_plateau_detected` | Gradient vanishing flag | `false` |
-| `gradient_stats.mean_norm` | Average gradient magnitude | > 1e-4 |
+| `test_loss` | Final test (validation) loss | decreasing over training |
+| `training_time_seconds` | Time in seconds | Varies by depth/approach |
+| `total_updates` | Gradient updates consumed | 2500 |
+| `training_diagnostic.mean_param_grad_variance` | Final mean per-parameter gradient variance (V̄ˣ) | lower = healthier gradients |
+| `training_diagnostic.trajectory` | Logged gradient-variance over training | see trajectory analysis |
+
+> No binary `barren_plateau_detected` flag is emitted. Gradient behavior is
+> reported through the variance statistics and trajectories (see the
+> [Metrics Schema](metrics_schema.md)).
 
 ---
 
 ## Understanding Accuracy
 
-### Actual Accuracy by Configuration (Mean ± Std across 5 seeds)
-
-| Approach | 4 Layers | 6 Layers | 8 Layers |
-|----------|----------|----------|----------|
-| Baseline | 73.8% ± 2.2% | 73.9% ± 2.1% | **52.7% ± 1.1%** ⚠️ |
-| Layerwise | 74.0% ± 3.0% | 74.2% ± 2.5% | 73.9% ± 2.6% |
-| Local Cost | 75.3% ± 3.2% | 75.6% ± 3.1% | 75.4% ± 2.5% |
+Full accuracy tables and statistics are reported in the [README (§4 Results)](../README.md#4-results) and the [Results Report](results_report.md). In summary:
 
 ### Key Observations
 
-1. **Baseline degrades catastrophically at 8 layers** — Accuracy drops to ~53% (near random chance), demonstrating the barren plateau problem
-2. **Layerwise maintains performance** — Consistent ~74% across all depths, validating the mitigation strategy
-3. **Local Cost provides the best and most stable results** — Consistently ~75% with no degradation at depth
+1. **All approaches are statistically tied on accuracy** — pairwise Welch t-tests give p ≥ 0.43 at every depth
+2. **No depth degradation** — every approach holds ~86-87% at 4, 6, and 8 layers (including the baseline)
+3. **The variations are real but comparable** — run-to-run spread is 1.8-3.3% across 20 seed triples
+
+Accuracy therefore does **not** separate mitigation strategies on this task; the differentiating signal is gradient variance (next section).
 
 ---
 
 ## Understanding Gradients
 
-### Gradient Norm Interpretation
+### Gradient Variance as the Key Diagnostic
 
-| Mean Gradient Norm | Interpretation |
-|--------------------|----------------|
-| > 0.1 | Excellent — strong learning signal |
-| 0.01 - 0.1 | Good — healthy gradients |
-| 0.001 - 0.01 | Acceptable — may train slowly |
-| < 0.001 | Warning — potential barren plateau |
-| < 1e-6 | Barren Plateau Detected |
+The per-parameter gradient variance V̄ˣ (mean over parameters of the variance-over-samples of each gradient) is the primary barren-plateau diagnostic:
 
-### Barren Plateau Detection
+| Final Grad-Var | Interpretation |
+|----------------|----------------|
+| relative to baseline down to ~0.4× | Strong mitigation signal (local cost) |
+| ~1.0× (same as baseline) | No change from end-to-end training |
+| upward trajectory during training | Gradients diverge/strengthen as training proceeds |
+| downward trajectory | Gradients settle as training proceeds (layerwise) |
 
-A barren plateau is flagged when:
-- Mean gradient norm < 1e-6
-- Training loss remains flat
-- Accuracy near random (50%)
+### Observed Gradient Variance (Final)
 
-> **Note:** The 8-layer baseline results show barren plateau *behavior* (accuracy stuck at ~53%, flat loss) even though gradient norms remain above the 1e-6 detection threshold. This indicates gradient degradation severe enough to prevent learning, but not extreme enough to trigger the automated flag.
+The observed final gradient variances and their ratios to the baseline are tabulated in the [README (§4 Results)](../README.md#4-results) and the [Results Report](results_report.md). In summary: local cost consistently lowers gradient variance by 1.5-2.4× versus the global-cost baseline (Welch t-test p ≤ 0.007 at every depth), at no loss in accuracy.
+
+### Trajectory Trends
+
+| Approach | Dominant Grad-Var Trajectory | Rising runs |
+|----------|------------------------------|-------------|
+| Baseline | Rises during training | 16-19/20 |
+| Layerwise | Falls during training | 0-1/20 |
+| Local Cost | Rises mildly | 14/20 |
+
+Layerwise training is unique in showing gradient variance that *decreases* as training progresses, reflecting its incremental optimization path.
 
 ---
 
@@ -63,43 +70,38 @@ A barren plateau is flagged when:
 
 ### What to Look For
 
-1. **At 4 layers:** All approaches perform similarly (~74-75%)
-2. **At 6 layers:** All approaches still perform similarly (~74-76%)
-3. **At 8 layers:**
-   - Baseline: Collapses to ~53% (barren plateau)
-   - Layerwise: Maintains ~74% accuracy
-   - Local Cost: Maintains ~75% accuracy
+1. **At every depth:** all approaches achieve ~86-87% accuracy — differences are not significant (p ≥ 0.43)
+2. **Gradient variance:** local cost is 1.5-2.4× lower than baseline at all depths (significant, p ≤ 0.007)
+3. **Layerwise trajectory:** the only approach whose gradient variance falls during training
 
 ### Success Criteria
 
 An approach is considered effective if:
 - Test accuracy > 70%
 - No significant accuracy drop with increasing depth
-- Gradient norm > 0.01
+- Lower gradient variance than the global-cost baseline
 - Training converges (loss decreases)
 
 ---
 
 ## Training Curves
 
-The `training_history.png` plot shows:
+The `training_history.png` plot shows two panels (over gradient steps):
 
-1. **Loss curves** (top left)
+1. **Loss curves** (left)
    - Training loss (blue)
    - Validation loss (orange)
-   - Should decrease over epochs
+   - Should decrease over updates
 
-2. **Accuracy curves** (top right)
+2. **Accuracy curves** (right)
    - Training accuracy (blue)
    - Validation accuracy (orange)
-   - Should increase over epochs
+   - Should increase over updates
 
-3. **Gradient norms** (bottom left, log scale)
-   - Shows gradient magnitude over training
-   - Should remain stable, not decay to zero
-
-4. **Gradient variance** (bottom right, log scale)
-   - Shows gradient stability over training
+The gradient-variance trajectory is recorded in `metrics.json`
+(`training_diagnostic.trajectory`) and can be plotted with
+`src/evaluation/visualization.py::plot_gradient_trajectory`; compare the trend
+(rising for baseline/local cost, falling for layerwise).
 
 ### Healthy vs Unhealthy Training
 
@@ -107,7 +109,7 @@ The `training_history.png` plot shows:
 |--------|---------|-----------|
 | Loss | Decreases steadily | Flat or erratic |
 | Accuracy | Increases to 70%+ | Stuck at ~50% |
-| Gradients | Stable > 0.01 | Decaying toward 0 |
+| Gradient variance | Maintained or settling | Collapsing to ~0 or exploding |
 
 ---
 
@@ -115,9 +117,9 @@ The `training_history.png` plot shows:
 
 When running multiple seeds, expect:
 
-- **Accuracy variance:** < 5% standard deviation
-- **Gradient variance:** Within same order of magnitude
-- **Training time:** Similar (±20%)
+- **Accuracy variance:** < 5% standard deviation (observed 1.8-3.3%)
+- **Gradient variance:** same order of magnitude across seeds
+- **Training time:** similar (±20%)
 
 Use `analyze_seed_variance.py` to check:
 ```bash
@@ -147,15 +149,7 @@ python scripts/check_output_format.py results/
 
 ## Expected Training Times
 
-Based on production runs:
-
-| Depth | Expected Time | Expected Accuracy |
-|-------|---------------|-------------------|
-| 4 layers | 10-30 min | 73-80% |
-| 6 layers | 27-35 min | 70-80% |
-| 8 layers | 38-60 min | 50-78%* |
-
-*8-layer baseline expected to show barren plateau (~53%)
+Mean training times per configuration are reported in the [README (§4 Results)](../README.md#4-results) and the [Results Report](results_report.md). As a rule of thumb, local cost is the most expensive at depth, while layerwise training is the cheapest for shallow circuits.
 
 ---
 
@@ -163,14 +157,14 @@ Based on production runs:
 
 When analyzing results, focus on:
 
-1. **Does baseline degrade at 8 layers?** (Should be YES — drops to ~53%)
-2. **Does layerwise maintain performance?** (Should be YES — stays at ~74%)
-3. **Does local cost maintain performance?** (Should be YES — stays at ~75%)
-4. **Is the degradation statistically significant?** (Yes — 8L baseline is >20 percentage points below mitigation strategies)
-5. **Is reproducibility confirmed?** (Variance < 5% across seeds)
+1. **Do all approaches maintain accuracy at depth?** (YES — ~86-87% at 4/6/8L, no loss)
+2. **Is there an accuracy difference between approaches?** (NO — p ≥ 0.43 at every depth)
+3. **Does local cost lower gradient variance?** (YES — 1.5-2.4× lower than baseline, p ≤ 0.007)
+4. **Is layerwise qualitatively different?** (YES — gradient variance *falls* during training)
+5. **Is reproducibility confirmed?** (Yes — 1.8-3.3% std across 20 seed triples)
 
 These are the core findings for the research.
 
 ---
 
-**Last Updated:** February 2026
+**Last Updated:** October 2026

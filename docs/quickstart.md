@@ -20,33 +20,36 @@ pip install -r requirements.txt
 
 ## Running Single Experiments
 
+Each run consumes one seed triple. `--seed-index` selects the seed index (0-19); the
+data/init/training seeds are derived as `42 + 3×index`, `+ 1`, `+ 2`.
+
 ### Baseline Approach
 ```bash
-python experiments/run_baseline.py configs/baseline_4layer.yaml --seed 42
+python experiments/run_baseline.py configs/baseline_4layer.yaml --seed-index 0
 ```
 
 ### Layerwise Approach
 ```bash
-python experiments/run_layerwise.py configs/layerwise_4layer.yaml --seed 42
+python experiments/run_layerwise.py configs/layerwise_4layer.yaml --seed-index 0
 ```
 
 ### Local Cost Approach
 ```bash
-python experiments/run_local_cost.py configs/local_cost_4layer.yaml --seed 42
+python experiments/run_local_cost.py configs/local_cost_4layer.yaml --seed-index 0
 ```
 
 ---
 
 ## Running Batch Experiments
 
-### Run all seeds for one approach
+### Run all 20 seeds for one approach
 ```bash
 python scripts/run_batch.py baseline configs/baseline_4layer.yaml
 ```
 
 ### Run all experiments for a specific depth
 ```bash
-# 4-layer (15 total: 3 approaches × 5 seeds)
+# 4-layer (60 total: 3 approaches × 20 seeds)
 python scripts/run_4layer_experiments.py
 
 # 6-layer
@@ -105,40 +108,41 @@ python scripts/analyze_seed_variance.py results/baseline/depth_4/
 results/
 ├── baseline/
 │   └── depth_{4,6,8}/
-│       └── seed_{42,123,456,789,101112}/
+│       └── seed_{0..19}/
 │           ├── metrics.json
 │           └── training_history.png
 ├── layerwise/
 │   └── depth_{4,6,8}/
-│       └── seed_{...}/
+│       └── seed_{0..19}/
 │           ├── metrics.json
 │           └── training_history.png
 └── local_cost/
     └── depth_{4,6,8}/
-        └── seed_{...}/
+        └── seed_{0..19}/
             ├── metrics.json
             └── training_history.png
 ```
 
 ### Key metrics to check
 - `test_acc` — Final test accuracy (0-1)
-- `training_time` — Time in seconds
-- `barren_plateau_detected` — True if gradients vanished below 1e-6
-- `gradient_stats.mean_norm` — Average gradient magnitude
+- `training_diagnostic.mean_param_grad_variance` — Final gradient variance (barren-plateau diagnostic)
+- `training_diagnostic.trajectory` — Gradient-variance over training
+- `training_time_seconds` — Time in seconds
+
+Full schema: [Metrics Schema](metrics_schema.md).
 
 ---
 
 ## Time Estimates
 
-| Experiment Set | Estimated Time |
-|----------------|----------------|
-| Single 4-layer run | 10-30 min |
-| Single 6-layer run | 27-35 min |
-| Single 8-layer run | 38-60 min |
-| All 4-layer (15 runs) | 5-8 hours |
-| All 6-layer (15 runs) | 8-12 hours |
-| All 8-layer (15 runs) | 12-20 hours |
-| **ALL 45 runs** | **25-40 hours** |
+Observed means from the 180 production runs:
+
+| Experiment Set | Observed Mean Time |
+|----------------|--------------------|
+| Single 4-layer run | 1.1-4.2 h |
+| Single 6-layer run | 0.7-4.1 h |
+| Single 8-layer run | 1.7-6.6 h |
+| **All 180 runs** | **~506 CPU-hours (~21 CPU-days)** |
 
 ---
 
@@ -146,10 +150,10 @@ results/
 
 ```bash
 # Run a quick smoke test
-python experiments/run_baseline.py configs/baseline_test.yaml --seed 42
+python experiments/run_baseline.py configs/baseline_test.yaml --seed-index 0
 
 # Run full experiment
-python experiments/run_baseline.py configs/baseline_4layer.yaml --seed 42
+python experiments/run_baseline.py configs/baseline_4layer.yaml --seed-index 7
 
 # Validate results
 python scripts/validate_results.py results/
@@ -166,4 +170,4 @@ See [troubleshooting.md](troubleshooting.md) for common issues and solutions.
 
 ---
 
-**Last Updated:** February 2026
+**Last Updated:** October 2026

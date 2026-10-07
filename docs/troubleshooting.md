@@ -122,7 +122,10 @@ ValueError: Operation ... is not in circuit
 
 **Solutions:**
 1. **Reduce learning rate**: 0.01 → 0.001
-2. **Check for barren plateau**: This is expected for deep baseline circuits
+2. **Check gradient variance**: a run stuck near 50% should be inspected via
+   `training_diagnostic.mean_param_grad_variance` — in the 180-run suite every
+   strategy converged at all depths, so persistent failure usually signals a
+   config/data problem, not a barren plateau
 3. **Verify data loading**: Run `python tests/test_data_consistency.py`
 
 ### NaN in Loss/Gradients
@@ -179,7 +182,7 @@ sed -i 's/\r$//' scripts/*.py experiments/*.py
 ### Path Issues
 Use forward slashes and Linux-style paths in WSL:
 ```bash
-cd /mnt/d/Programs/PF/Barren-Plateau-Mitigation-QNN
+cd ~/Barren-Plateau-Mitigation-QNN
 ```
 
 ---
@@ -194,4 +197,4 @@ If you encounter an issue not covered here:
 
 ---
 
-**Last Updated:** February 2026
+**Last Updated:** October 2026

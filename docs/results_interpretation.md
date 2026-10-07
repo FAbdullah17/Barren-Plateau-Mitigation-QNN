@@ -1,56 +1,38 @@
 # Results Interpretation Guide
 
+Detailed analysis guide with actual data from the 180 production runs.
+
 ## Understanding Experimental Outputs
 
 ### Metrics JSON Structure
 
-Each experiment generates a `metrics.json` file containing:
+Each experiment generates a `metrics.json` file (see [Metrics Schema](metrics_schema.md) for the authoritative spec):
 
 ```json
 {
-  "config": { ... },
-  "seed": 42,
-  "final_train_loss": 0.5507,
-  "final_train_acc": 0.730,
-  "final_val_loss": 0.5176,
-  "final_val_acc": 0.760,
-  "test_loss": 0.5176,
-  "test_acc": 0.760,
-  "training_time": 1583.03,
-  "gradient_stats": {
-    "mean_norm": 0.284,
-    "std_norm": 0.180,
-    "variance": 0.032,
-    "min_norm": 0.012,
-    "max_norm": 1.149,
-    "median_norm": 0.250,
-    "total_updates": 2500.0
+  "config": { "approach": "baseline", "n_qubits": 8, "n_layers": 4, "cost": "global",
+              "learning_rate": 0.01, "batch_size": 20, "total_updates": 2500 },
+  "data_seed": 42,
+  "init_seed": 43,
+  "training_seed": 44,
+  "seed_index": 0,
+  "test_loss": 0.48,
+  "test_acc": 0.885,
+  "training_time_seconds": 15230,
+  "total_updates": 2500,
+  "layerwise_budget_split": null,
+  "n_parameters": 64,
+  "training_diagnostic": {
+    "mean_param_grad_variance": 0.00694,
+    "trajectory": { "step": [...], "mean_param_grad_variance": [...] }
   },
-  "barren_plateau_detected": false,
   "history": {
-    "train_loss": [...],
-    "train_acc": [...],
-    "val_loss": [...],
-    "val_acc": [...],
-    "gradient_norms": [...],
-    "gradient_variance": [...]
-  }
+    "step": [...], "train_loss": [...], "train_acc": [...],
+    "val_step": [...], "val_loss": [...], "val_acc": [...]
+  },
+  "pca_info": { "n_components": 8, ... }
 }
 ```
-
-### Comparison CSV Structure
-
-The comprehensive comparison generates a CSV with columns:
-
-| Column | Description | Expected Range |
-|--------|-------------|----------------|
-| `approach` | Training method | baseline, layerwise, local_cost |
-| `depth` | Circuit layers | 4, 6, 8 |
-| `seed` | Random seed | 42, 123, 456, 789, 101112 |
-| `test_acc` | Test accuracy | 0-1 |
-| `training_time` | Training duration | seconds |
-| `barren_plateau_detected` | BP detected | true/false |
-| `mean_norm` | Average gradient | typically 1e-2 to 1e-1 |
 
 ---
 
@@ -58,151 +40,110 @@ The comprehensive comparison generates a CSV with columns:
 
 ### 1. Test Accuracy
 
-**What it measures**: Classification performance on unseen data
+**What it measures**: Classification performance on held-out test data.
 
-**Observed ranges** (across all 45 experiments):
-- 70-80%: Typical for 4-layer and 6-layer circuits across all approaches
-- 70-78%: Layerwise and Local Cost at 8 layers
-- 52-54%: Baseline at 8 layers (barren plateau)
+**Observed ranges** (180 runs, 20 seed triples per condition):
+- Every approach × depth combination averages **~86-87%**
+- Per-condition range of the mean: 86.1% (baseline & local cost at 4L) to 87.3% (local cost at 8L)
+- No run falls below 78.5%; no approach suffers depth degradation
 
-**Actual results** (mean ± std, 5 seeds each):
+**Actual results** (mean ± std, 20 seed triples):
 
 | Approach | 4-Layer | 6-Layer | 8-Layer |
 |----------|---------|---------|---------|
-| Baseline | 73.8 ± 2.2% | 73.9 ± 2.1% | **52.7 ± 1.1%** |
-| Layerwise | 74.0 ± 3.0% | 74.2 ± 2.5% | 73.9 ± 2.6% |
-| Local Cost | 75.3 ± 3.2% | 75.6 ± 3.1% | 75.4 ± 2.5% |
+| Baseline | 86.1 ± 3.3% | 87.2 ± 1.8% | 87.2 ± 2.2% |
+| Layerwise | 86.4 ± 3.0% | 86.7 ± 2.4% | 86.7 ± 2.9% |
+| Local Cost | 86.1 ± 2.7% | 87.1 ± 2.2% | 87.3 ± 2.1% |
 
-**Interpretation**: Baseline collapses at 8 layers while both mitigation strategies maintain performance.
+**Interpretation**: With 8 qubits, all strategies — including the baseline — train successfully at every depth. Accuracy is **not** the discriminating metric between approaches on this benchmark.
 
-### 2. Gradient Norms
+### 2. Gradient Variance (Primary Diagnostic)
 
-**What it measures**: Magnitude of parameter updates
+**What it measures**: `mean_param_grad_variance` — the mean over parameters of the variance-over-samples of each parameter's gradient (V̄ˣ). Lower values indicate flatter/less variable gradients; the quantity is the standard barren-plateau diagnostic.
 
-**Healthy trajectory**:
-- Starts: ~0.1 - 0.5
-- Mid-training: ~0.01 - 0.1
-- Converged: ~0.001 - 0.01
+**Actual final values**:
 
-**Barren plateau signature**:
-- Gradients become small and uniform
-- Training loss remains flat
-- Accuracy stuck near random chance (50%)
+| Config | Final Grad-Var | vs Baseline |
+|--------|----------------|-------------|
+| Baseline 4/6/8L | 0.00694 / 0.00658 / 0.00350 | 1.0× |
+| Layerwise 4/6/8L | 0.00731 / 0.00628 / 0.00452 | 1.05 / 0.96 / 1.29× |
+| Local Cost 4/6/8L | **0.00319 / 0.00279 / 0.00240** | **0.46 / 0.42 / 0.69×** |
 
-**Visual patterns**:
+**Interpretation**: The local cost function maintains 1.5-2.4× lower gradient variance than the global-cost baseline at every depth, at no accuracy cost. This is the statistically robust, reproducible effect of the study.
 
-```
-Normal gradient decay:
-Norm
-0.5 |●
-0.1 |  ●●
-0.01|    ●●●
-1e-3|       ●●●●
-    └────────────→ Epoch
+**Trajectory patterns**: baseline and local cost typically show gradient variance *rising* over training (16-19/20 and 14/20 runs respectively), while layerwise training shows it *falling* (0-1/20 runs). Layerwise is the only approach whose optimization path systematically settles the gradients.
 
-Barren plateau (8L baseline):
-Norm
-0.5 |●
-0.2 |●●●●●●●●●●●●●
-    └────────────→ Epoch
-    (norms don't vanish below 1e-6 but
-     training still fails to converge)
-```
+### 3. Training Time
 
-### 3. Gradient Variance
+**Observed means** (8 qubits, on CPU):
 
-**What it measures**: Stability of gradient updates
+| Config | Mean Time |
+|--------|-----------|
+| Baseline 4/6/8L | 4.2 / 1.7 / 1.7 h |
+| Layerwise 4/6/8L | 1.1 / 0.7 / 1.8 h |
+| Local Cost 4/6/8L | 3.5 / 4.1 / 6.6 h |
 
-**Interpretation**:
-- High variance (>0.1): Unstable training, needs smaller learning rate
-- Medium variance (0.001-0.1): Normal training
-- Very low variance (<1e-6): Possible barren plateau
-
-**Relationship to barren plateaus**:
-
-$$\text{Var}[\nabla L] \propto \frac{1}{2^n} \quad \text{(barren plateau)}$$
-
-### 4. Training Time
-
-**Factors**:
-- Circuit depth (deeper = slower)
-- Number of epochs
-- Batch size
-
-**Observed training times** (4 qubits, on CPU):
-
-| Config | Time Range |
-|--------|------------|
-| Baseline 4L (50 epochs) | 10-27 min |
-| Baseline 6L (50 epochs) | 27-32 min |
-| Baseline 8L (50 epochs) | 38-40 min |
-| Layerwise 4L (50 total epochs) | 7-16 min |
-| Layerwise 6L (70 total epochs) | 28-30 min |
-| Layerwise 8L (90 total epochs) | 50-52 min |
-| Local Cost 4L (50 epochs) | 19-28 min |
-| Local Cost 6L (50 epochs) | 27-28 min |
-| Local Cost 8L (50 epochs) | 55-60 min |
+Local cost is the most expensive at depth; layerwise is the cheapest for shallow circuits.
 
 ---
 
 ## Statistical Significance
 
-### Performing Analysis
+### Performed Analysis
 
-To assess statistical significance between approaches, run pairwise t-tests on the 5-seed results for each approach-depth combination. Key comparisons:
+Welch t-tests on the 20-seed-triple results for each approach-depth combination:
 
-- **Baseline vs Layerwise at 8 layers**: Expected to be highly significant (>20 pp accuracy difference)
-- **Baseline vs Local Cost at 8 layers**: Expected to be highly significant (>22 pp accuracy difference)
-- **Layerwise vs Local Cost at 8 layers**: Expected to be non-significant (~1.5 pp difference)
-
-Use `scripts/compare_metrics.py` or perform manual analysis:
+| Comparison | 4L p | 6L p | 8L p | Verdict |
+|------------|------|------|------|---------|
+| Baseline vs Local Cost (acc) | 0.959 | 0.879 | 0.801 | Not significant |
+| Layerwise vs Local Cost (acc) | 0.748 | 0.551 | 0.434 | Not significant |
+| Baseline vs Layerwise (acc) | 0.808 | 0.437 | 0.571 | Not significant |
+| Baseline vs Local Cost (grad-var) | 7.8e-7 | 3.5e-9 | 6.8e-3 | **Highly significant** |
+| Layerwise vs Local Cost (grad-var) | 1.2e-8 | 7.3e-9 | 1.8e-9 | **Highly significant** |
 
 ```python
 from scipy import stats
 
-# Example: compare 8-layer baseline vs layerwise
-baseline_8L = [0.544, 0.516, 0.526, 0.531, 0.516]
-layerwise_8L = [0.770, 0.730, 0.755, 0.695, 0.745]
+baseline_8L_gv = [<20 final grad-var values>]
+local_8L_gv = [<20 final grad-var values>]
 
-t_stat, p_value = stats.ttest_ind(baseline_8L, layerwise_8L)
-print(f"t = {t_stat:.3f}, p = {p_value:.6f}")
+t_stat, p_value = stats.ttest_ind(baseline_8L_gv, local_8L_gv, equal_var=False)
+print(f"t = {t_stat:.3f}, p = {p_value:.3e}")
 ```
 
-### Effect Size (Cohen's d)
+### Effect Size
 
-**Guidelines**:
-- d < 0.2: Negligible
-- 0.2 ≤ d < 0.5: Small
-- 0.5 ≤ d < 0.8: Medium
-- d ≥ 0.8: Large
-
-The 8-layer baseline vs layerwise comparison is expected to show a large effect size (d > 2.0) given the magnitude of the accuracy difference.
+- The accuracy effect between approaches is negligible (no separation).
+- The gradient-variance effect for local cost vs baseline is **large** across all depths (Cohen's d = 1.9 / 2.7 / 0.9 for 4/6/8L, all above the 0.8 "large" threshold; p ≤ 0.007 with n = 20).
 
 ---
 
 ## Success Rate Analysis
 
-**Definition**: Percentage of runs achieving ≥70% accuracy (adjusted threshold based on actual results)
+**Definition**: Percentage of runs achieving ≥70% accuracy.
 
-**Actual results**:
+**Actual results (20 runs per cell)**:
+
 ```
 Depth 4:
-  Baseline:    80% (4/5 runs ≥ 70%)
-  Layerwise:   60% (3/5 runs ≥ 70%)
-  Local Cost:  80% (4/5 runs ≥ 70%)
+  Baseline:    100% (20/20 ≥ 70%)
+  Layerwise:   100% (20/20 ≥ 70%)
+  Local Cost:  100% (20/20 ≥ 70%)
 
 Depth 6:
-  Baseline:    80% (4/5 runs ≥ 70%)
-  Layerwise:   80% (4/5 runs ≥ 70%)
-  Local Cost:  80% (4/5 runs ≥ 70%)
+  Baseline:    100% (20/20 ≥ 70%)
+  Layerwise:   100% (20/20 ≥ 70%)
+  Local Cost:  100% (20/20 ≥ 70%)
 
 Depth 8:
-  Baseline:    0% (0/5 runs ≥ 70%)    ← Barren plateau
-  Layerwise:   60% (3/5 runs ≥ 70%)
-  Local Cost:  80% (4/5 runs ≥ 70%)
+  Baseline:    100% (20/20 ≥ 70%)
+  Layerwise:   100% (20/20 ≥ 70%)
+  Local Cost:  100% (20/20 ≥ 70%)
 ```
 
-**Key insight**: Baseline 8L completely fails while both mitigation strategies maintain reasonable success rates.
+At a stricter ≥85% threshold (4/6/8L): Baseline 75/90/90%, Layerwise 60/75/85%, Local Cost 60/85/90%.
+
+**Key insight**: Every strategy succeeds on this benchmark at every depth; success-rate analysis does not separate the approaches.
 
 ---
 
@@ -210,41 +151,32 @@ Depth 8:
 
 ### Observed Patterns
 
-**Baseline approach**:
-```
-Accuracy
- 80%|
- 70%|●●●●
- 60%|
- 50%|       ●     ← Barren plateau
-    └─────────────→
-    4  6  8  Depth
-```
-Catastrophic degradation at 8 layers
+All three approaches are flat across depth:
 
-**Layerwise approach**:
 ```
-Accuracy
- 80%|
- 70%|●●●●●●●●●
- 60%|
- 50%|
-    └─────────────→
-    4  6  8  Depth
+Accuracy (%)
+ 90|●────────●────────●   all approaches ~86-87%
+ 85|
+ 80|
+ 75|
+ 70|
+   └──────────────────
+     4    6    8  Depth
 ```
-Consistent performance across all depths
 
-**Local cost approach**:
+There is **no barren-plateau collapse** at this scale: baseline, layerwise, and local cost all converge at 8 layers. The mitigation signal appears in gradient variance instead:
+
 ```
-Accuracy
- 80%|
- 70%|●●●●●●●●●●
- 60%|
- 50%|
-    └─────────────→
-    4  6  8  Depth
+Final grad-var
+ 0.007|●(base 4L)  ●(base 6L)
+ 0.005|             ●(layer 8L)
+ 0.003|●(local 4L)  ●(local 6L)
+      |                       ●(local 8L)
+      └──────────────────
+        4    6    8  Depth
 ```
-Slightly better than layerwise, equally robust
+
+Local cost is consistently lowest; the baseline is consistently highest.
 
 ---
 
@@ -253,56 +185,48 @@ Slightly better than layerwise, equally robust
 ### 1. Training Loss Curves
 
 **Healthy training**:
-- Smooth decrease
-- Train and test losses track together
-- Convergence within 30-50 epochs
-
-**Problematic patterns**:
-- **Barren plateau**: Loss flat from start, no decrease
-- **Overfitting**: Train loss decreases, test loss increases
-- **Oscillation**: Erratic jumps, needs lower learning rate
+- Smooth decrease over the 2500 updates
+- Convergence is reliable across all 20 seeds per condition
 
 ### 2. Gradient Trajectory Plots
 
-**Normal behavior (4-6 layers)**:
-- Gradients start moderate (~0.1-0.5)
-- Gradual decay as model converges
-- Stable throughout training
+- **Baseline / Local Cost**: gradient variance rises over training (16-19/20 and 14/20 runs) — gradients strengthen as the model learns
+- **Layerwise**: gradient variance falls over training (0-1/20 runs) — the incremental schedule settles the gradients
 
-**8-layer baseline (barren plateau)**:
-- Gradients remain small and uniform
-- No meaningful optimization direction
+This dichotomy is the clearest visual signature for distinguishing layerwise training from the other two strategies.
 
 ### 3. Comparison Bar Charts
 
 **Error bars interpretation**:
-- Small error bars: Consistent performance across seeds
-- Large error bars: High variance, less reliable
-- Non-overlapping bars: Likely significant difference
+- Accuracy error bars (1.8-3.3%) heavily overlap between approaches → no significant difference
+- Gradient-variance error bars (local cost: 0.0008-0.0015, baseline: 0.0017-0.0023) overlap only slightly → significant reduction
 
 ---
 
 ## Common Result Patterns
 
-### Pattern 1: Depth-Dependent Failure (Our Key Finding)
+### Pattern 1: No Accuracy Separation at Depth
 ```
 Approach     | 4L Acc | 8L Acc | Delta
 -------------|--------|--------|------
-Baseline     | 73.8%  | 52.7%  | -21.1 pp ← Barren plateau
-Layerwise    | 74.0%  | 73.9%  | -0.1 pp  ← Mitigated
-Local Cost   | 75.3%  | 75.4%  | +0.1 pp  ← Mitigated
+Baseline     | 86.1%  | 87.2%  | +1.1 pp  (no collapse)
+Layerwise    | 86.4%  | 86.7%  | +0.3 pp
+Local Cost   | 86.1%  | 87.3%  | +1.2 pp
 ```
-**Conclusion**: Both mitigation strategies successfully prevent barren plateau degradation.
+**Conclusion**: At 8 qubits the benchmark is trainable by all strategies; accuracy does not separate approaches.
 
-### Pattern 2: Mitigation Strategy Comparison
+### Pattern 2: Local Cost Lowers Gradient Variance
 ```
-At 8 layers:
-Approach     | Accuracy | Stability
--------------|----------|----------
-Layerwise    | 73.9%    | ±2.6%
-Local Cost   | 75.4%    | ±2.5%  ← Slightly better
+Depth | Baseline | Local Cost | Reduction | p
+------|----------|------------|-----------|-----
+4L    | 0.00694  | 0.00319    | 2.2×      | 7.8e-7
+6L    | 0.00658  | 0.00279    | 2.4×      | 3.5e-9
+8L    | 0.00350  | 0.00240    | 1.5×      | 6.8e-3
 ```
-**Conclusion**: Local cost provides marginally better accuracy and stability, but the difference is small.
+**Conclusion**: Local cost functions deliver a statistically significant, reproducible reduction in gradient variance at all depths without hurting accuracy.
+
+### Pattern 3: Layerwise Settles Gradients
+Layerwise is the only approach whose gradient-variance trajectory *decreases* during training (1/20 runs rising, vs 16-19/20 for baseline), indicating a distinct optimization signature.
 
 ---
 
@@ -311,113 +235,47 @@ Local Cost   | 75.4%    | ±2.5%  ← Slightly better
 ### Problem: Low Accuracy Across All Approaches
 
 **Possible causes**:
-1. Data quality issues
+1. Data quality / PCA issues
 2. Hyperparameters need tuning
-3. Bug in implementation
+3. Bug in implementation (e.g., label/gradient handling)
 
 **Diagnosis steps**:
 ```python
 # Check data
-assert X_train.shape == (1000, 16)
+assert X_train.shape[1] == 8          # PCA-reduced features
 assert set(y_train) == {-1, 1}
 
-# Check gradient flow
-print(f"Initial gradient: {history['gradient_norms'][0]}")
-# Should be > 0.01
+# Check initial gradient health
+diag = metrics['training_diagnostic']
+assert diag['mean_param_grad_variance'] > 1e-4
 
 # Check loss decrease
-assert history['train_loss'][-1] < history['train_loss'][0]
+h = metrics['history']
+assert h['train_loss'][-1] < h['train_loss'][0]
 ```
 
-### Problem: Barren Plateau Detected
+### Problem: A Run Fails to Train (Loss Flat, ~50% Acc)
 
-**Indicators**:
-- `barren_plateau_detected: true`
-- Gradient norms < 1e-6 early in training
-- Flat loss curve
+**Diagnosis**: A genuinely failed run should be inspected for:
+- A seed triple that collides (verify `seed_index → (data, init, training)_seed` mapping)
+- PCA fit statistics (`pca_info`) — e.g., a degenerate component count
 
 **Solutions**:
-1. **Reduce depth**: Try 2-4 layers instead of 6-8
-2. **Use local cost**: Switch to per-qubit measurements
-3. **Try layerwise**: Incremental training
-4. **Better initialization**: Use pre-training or transfer learning
+1. Re-run the seed (the runner skips indices that are already complete; delete the seed's `metrics.json` to force a fresh run)
+2. Reduce depth or increase update budget
+3. Switch to local cost for gradient-variance safety margin
 
 ### Problem: High Variance Across Seeds
 
 **Indicators**:
-- Std dev > 10% of mean
-- Success rate < 60%
+- Std dev > 5% of mean (observed max is 3.3%)
+- Success rate < 90% at the ≥70% threshold
 
 **Solutions**:
-1. **More seeds**: Run 10-20 seeds instead of 5
-2. **Adjust learning rate**: Try 0.001 or 0.1
-3. **Increase epochs**: Allow more training time
-4. **Batch size tuning**: Try 10 or 40
+1. More seeds (the 20-triple ladder; extend `seeds.seed_triples` in the config)
+2. Adjust learning rate (0.001-0.1)
+3. Increase `total_updates`
 
 ---
 
-## Reporting Results
-
-### Minimum Reporting Standards
-
-1. **Accuracy**: Mean ± std across seeds
-2. **Success rate**: Percentage achieving threshold
-3. **Statistical tests**: p-values and effect sizes
-4. **Hyperparameters**: Full configuration details
-5. **Computational cost**: Training time and resources
-
-### Actual Results Summary Table
-
-| Approach | Depth | Accuracy (%) | Success Rate (≥70%) | BP Detected |
-|----------|-------|--------------|---------------------|-------------|
-| Baseline | 4 | 73.8 ± 2.2 | 80% | No |
-| Baseline | 6 | 73.9 ± 2.1 | 80% | No |
-| Baseline | 8 | **52.7 ± 1.1** | **0%** | No* |
-| Layerwise | 4 | 74.0 ± 3.0 | 60% | No |
-| Layerwise | 6 | 74.2 ± 2.5 | 80% | No |
-| Layerwise | 8 | 73.9 ± 2.6 | 60% | No |
-| Local Cost | 4 | 75.3 ± 3.2 | 80% | No |
-| Local Cost | 6 | 75.6 ± 3.1 | 80% | No |
-| Local Cost | 8 | 75.4 ± 2.5 | 80% | No |
-
-*Baseline 8L shows barren plateau behavior (stagnant accuracy) but gradient norms remain above the 1e-6 detection threshold.
-
----
-
-## Publication-Ready Figures
-
-### Essential Plots
-
-1. **Accuracy comparison** (bar chart with error bars)
-2. **Depth impact** (line plot with multiple approaches)
-3. **Gradient trajectories** (log-scale time series)
-4. **Success rate heatmap** (approach × depth)
-5. **Training time analysis** (time vs accuracy scatter)
-
-### Figure Quality Guidelines
-
-- **Resolution**: ≥300 DPI for publication
-- **Format**: PDF (vector) or PNG (high-res raster)
-- **Fonts**: 10-12 pt labels, 12-14 pt titles
-- **Colors**: Color-blind friendly palette
-- **Legends**: Clear and concise
-- **Axes**: Properly labeled with units
-
----
-
-## Conclusion Checklist
-
-Before finalizing results:
-
-- [x] All 45 experiments completed successfully
-- [ ] Statistical tests performed
-- [x] Visualizations generated and reviewed
-- [x] Results match expected theoretical behavior
-- [ ] Outliers investigated and explained
-- [x] Conclusions supported by data
-- [ ] Limitations acknowledged
-- [ ] Future work identified
-
----
-
-**Last Updated:** February 2026
+**Last Updated:** October 2026

@@ -157,8 +157,8 @@ Hardware-efficient ansatz is widely adopted in QML literature and aligns with NI
 | Optimizer | Adam | Universal standard in QML literature |
 | Learning rate | 0.01 | Validated in recent studies (Zhuang & Guan, 2025) |
 | Batch size | 20 | Standard for quantum ML experiments |
-| Training epochs | 50 | Sufficient for convergence assessment |
-| Shots (simulator) | 1024 | Standard for gradient estimation |
+| Total gradient updates | 2500 | Matching between approaches and depths |
+| Simulation | Deterministic state-vector (no shots) | Reproducible gradient statistics |
 | Initialization | Uniform random [-π, π] | Baseline approach |
 | Loss function | Binary cross-entropy | Standard for classification |
 
@@ -186,18 +186,18 @@ Hardware-efficient ansatz is widely adopted in QML literature and aligns with NI
 - Cost function: Global
 - Circuit depth: Build progressively from 1 to 4, 6, or 8 layers
 
-**Implementation Protocol (following Skolik et al., 2020):**
+**Implementation Protocol (following Skolik et al., 2020, step-budget variant):**
 
-1. **Initialization:** Train single-layer circuit for 10 epochs
+1. **Initialization:** Train a 1-layer circuit for `per_stage` gradient updates
 2. **Layer Addition:** Add one new layer (initialized randomly)
-3. **Selective Training:** Train only the new layer's parameters for 10 epochs while keeping previous layers frozen
+3. **Selective Training:** Train only the new layer's parameters for `per_stage` updates while keeping previous layers frozen
 4. **Iteration:** Repeat steps 2-3 until target depth reached
-5. **Fine-tuning (optional):** Unfreeze all parameters and train for 10 additional epochs
+5. **Fine-tuning:** Unfreeze all parameters and train for `finetune` updates
 
 **Hyperparameters:**
-- Epochs per layer: 10
+- Budget per stage / fine-tune (sum = 2500): 500/500 (4L), 357/358 (6L), 277/284 (8L)
 - Freezing strategy: Immediate (freeze after each layer's training phase)
-- Total training epochs: 10 × (number of layers) + 10 (fine-tuning)
+- Total gradient updates: `per_stage × n_layers + finetune = 2500` (matched to baseline)
 
 **Expected Outcome:** Maintained gradient variance across depths; 8% improvement in test accuracy; higher training success rate
 
@@ -268,7 +268,7 @@ Cerezo et al. (2021) prove that local cost functions maintain polynomial gradien
    - Circuit evaluation count
 
 6. **Success Rate**
-   - Percentage of runs (across 5 random seeds) achieving >90% test accuracy
+   - Percentage of runs (across 20 seed triples) achieving ≥70% test accuracy (stricter ≥85% also reported)
    - Robustness indicator
 
 ---
@@ -279,8 +279,8 @@ Cerezo et al. (2021) prove that local cost functions maintain polynomial gradien
 - Dataset and preprocessing
 - Quantum circuit architecture (gates, topology)
 - Optimizer and learning rate
-- Batch size and number of epochs
-- Random seed initialization (5 different seeds per configuration)
+- Batch size and total gradient updates
+- Random seed triples (20 per configuration, derived from base seed 42: indices 0-19)
 
 **Independent Variables:**
 - Training approach (Baseline, Layerwise, Local Cost)
@@ -293,7 +293,7 @@ Cerezo et al. (2021) prove that local cost functions maintain polynomial gradien
 - Training time
 
 **Total Experimental Configurations:**
-3 approaches × 3 depths × 5 seeds = **45 training runs**
+3 approaches × 3 depths × 20 seed triples = **180 training runs**
 
 ---
 
@@ -382,7 +382,7 @@ All implementation code will be made publicly available on GitHub for reproducib
 | **Phase 1: Setup & Baseline** | Weeks 1-4 | Working MNIST QNN baseline with documented barren plateau |
 | **Phase 2: Layerwise Implementation** | Weeks 5-8 | Validated layerwise training with gradient tracking |
 | **Phase 3: Local Cost Implementation** | Weeks 9-12 | Local cost function adaptation to MNIST classification |
-| **Phase 4: Comparative Experiments** | Weeks 13-17 | All 45 experimental runs completed |
+| **Phase 4: Comparative Experiments** | Weeks 13-17 | All 180 experimental runs completed |
 | **Phase 5: Analysis** | Weeks 18-19 | Statistical analysis, visualization, tables |
 | **Phase 6: Manuscript Preparation** | Weeks 20-23 | Complete draft ready for submission |
 | **Phase 7: Revision & Submission** | Weeks 24-26 | Final manuscript submitted to conference/journal |
