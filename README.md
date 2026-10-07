@@ -204,7 +204,7 @@ Python 3.10 (required by TensorFlow Quantum 0.7.2), TensorFlow 2.15.0, TensorFlo
 ```bash
 git clone https://github.com/FAbdullah17/Barren-Plateau-Mitigation-QNN.git
 cd Barren-Plateau-Mitigation-QNN
-python -m venv venv && source venv/bin/activate
+python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 ```
 

@@ -1,5 +1,14 @@
 # Research Problem Statement and Methodology
 
+> **Current-state note (October 2026).** This document began as a pre-experiment
+> proposal. The shipped implementation uses an 8-qubit PCA pipeline and the
+> completed corpus contains 180 runs (three approaches, depths 4/6/8, and 20
+> seed triples per condition). The results supersede the predictions below:
+> accuracy remains approximately 86–87% at all depths, while local cost produces
+> 1.5–2.4× lower training-diagnostic gradient variance than baseline. Read
+> [README](README.md), [Results Report](docs/results_report.md), and
+> [Methodology](docs/methodology.md) for the authoritative current description.
+
 ## Title
 **Empirical Comparison of Layerwise Training and Local Cost Functions for Mitigating Barren Plateaus in Quantum Neural Networks**
 
@@ -38,7 +47,7 @@ Two promising approaches have emerged from theoretical and limited empirical stu
 **Layerwise Training (Skolik et al., 2020):**
 - Train quantum circuits incrementally, one layer at a time
 - Freeze previously trained layers before adding new ones
-- **Evidence:** Single empirical study on MNIST (digits 3 vs 6) showing 8% lower generalization error and 40% higher success rate
+- **Evidence:** Prior literature reports improved trainability for layerwise methods; those percentages are literature context, not measurements from this repository.
 - **Limitation:** No independent replications; tested only on MNIST; unclear generalization to other datasets or tasks
 
 **Local Cost Functions (Cerezo et al., 2021):**
@@ -115,10 +124,12 @@ Despite strong theoretical foundations and preliminary empirical evidence for bo
 - Test samples: 200 (100 per class)
 - Preprocessing: Downsample 28×28 images to 4×4 using bilinear interpolation
 - Normalization: Scale pixel values to [0, 1]
-- Encoding: Flatten to 16-dimensional feature vector for quantum encoding
+- Encoding: PCA-reduce the 16 downsampled features to 8 components for quantum encoding
 
 **Downsampling Rationale:**
-4×4 images map naturally to 4-qubit quantum circuits (standard practice in QML), balancing computational feasibility with task complexity.
+The 4×4 reduction provides a fixed 16-dimensional classical representation; PCA
+then supplies exactly 8 features to the 8-qubit circuit while keeping the
+pipeline computationally tractable.
 
 ---
 
@@ -127,21 +138,21 @@ Despite strong theoretical foundations and preliminary empirical evidence for bo
 **Hardware-Efficient Ansatz**
 
 **Circuit Specifications:**
-- **Qubits:** 4
+- **Qubits:** 8
 - **Layers tested:** 4, 6, 8 (to evaluate scalability)
 - **Parameterized gates per layer:**
   - RY(θ) rotation on each qubit
   - RZ(φ) rotation on each qubit
   - CNOT gates connecting adjacent qubits (linear topology)
-- **Total parameters per layer:** 8 (2 rotations × 4 qubits)
-- **Total parameters (4-layer circuit):** 32
+- **Total parameters per layer:** 16 (2 rotations × 8 qubits)
+- **Total parameters:** 64 / 96 / 128 for depths 4 / 6 / 8
 
 **Data Encoding:**
-- Amplitude encoding via RY rotations in the initial layer
-- Each qubit encodes 4 pixel values through rotation angles
+- Angle encoding via one RY rotation per qubit
+- PCA supplies one feature per qubit; angles are `π × feature`
 
 **Measurement:**
-- Binary classification output derived from expectation value of Pauli-Z on designated output qubit(s)
+- Binary classification output uses the fixed transformed readout of the global product-Z or local averaged-Z expectation.
 
 **Justification:**
 Hardware-efficient ansatz is widely adopted in QML literature and aligns with NISQ device capabilities.
@@ -170,12 +181,12 @@ Hardware-efficient ansatz is widely adopted in QML literature and aligns with NI
 
 **Configuration:**
 - Training method: Standard gradient descent on full circuit
-- Cost function: Global (single expectation value on output qubit)
+- Cost function: Global product-Z readout over all qubits
 - Circuit depth: 4, 6, 8 layers
 
 **Purpose:** Establish baseline gradient behavior and performance; demonstrate barren plateau severity
 
-**Expected Outcome:** Observable gradient vanishing for 6+ layers; reduced accuracy or training failure for 8 layers
+**Observed outcome:** No accuracy collapse through 8 layers on the current 8-qubit PCA pipeline.
 
 ---
 
@@ -199,7 +210,7 @@ Hardware-efficient ansatz is widely adopted in QML literature and aligns with NI
 - Freezing strategy: Immediate (freeze after each layer's training phase)
 - Total gradient updates: `per_stage × n_layers + finetune = 2500` (matched to baseline)
 
-**Expected Outcome:** Maintained gradient variance across depths; 8% improvement in test accuracy; higher training success rate
+**Observed outcome:** Layerwise training has a distinct decreasing gradient-variance trajectory, but no accuracy advantage over the baseline.
 
 ---
 
@@ -219,12 +230,12 @@ C_global = ⟨ψ|O_global|ψ⟩
 C_local = (1/n) Σᵢ ⟨ψ|Oᵢ|ψ⟩
 
 where:
-- n = number of qubits (4)
+- n = number of qubits (8)
 - Oᵢ = observable measuring only qubit i (e.g., Pauli-Z on qubit i)
 - Summation averages over independent measurements of each qubit
 
 **Implementation:**
-- Measure expectation value of Pauli-Z on each of 4 qubits independently
+- Measure the average expectation value of Pauli-Z on all 8 qubits independently
 - Compute per-qubit cost as squared difference from target
 - Average costs across all qubits
 - Backpropagate averaged cost
@@ -232,7 +243,7 @@ where:
 **Theoretical Justification:**
 Cerezo et al. (2021) prove that local cost functions maintain polynomial gradient variance scaling: Var[∇θC] ∝ poly(n) instead of exp(-n)
 
-**Expected Outcome:** Trainability preserved at larger depths (8 layers); better gradient scaling than baseline; potentially lower accuracy than layerwise but better than baseline
+**Observed outcome:** Local cost preserves accuracy and lowers final training-diagnostic gradient variance by 1.5–2.4× versus baseline at all depths.
 
 ---
 
@@ -244,7 +255,7 @@ Cerezo et al. (2021) prove that local cost functions maintain polynomial gradien
    - Formula: Var[∇θC] = E[(∇θC)²] - (E[∇θC])²
    - Measured across all trainable parameters
    - Tracked every epoch
-   - **Barren plateau indicator:** Variance < 10⁻⁶
+   - The current implementation reports the continuous statistic `mean_param_grad_variance`; it does not emit a binary threshold-based barren-plateau decision.
 
 2. **Gradient Norm**
    - Formula: ||∇θC||₂ = sqrt(Σᵢ(∂C/∂θᵢ)²)
@@ -308,24 +319,24 @@ Cerezo et al. (2021) prove that local cost functions maintain polynomial gradien
 **Computational Resources:**
 - CPU-based quantum simulators (4-8 qubits feasible)
 - Standard laptop/workstation (no GPU required for this scale)
-- Estimated compute time: ~1-2 weeks for all experiments
+- Completed run inventory: approximately 506 summed CPU-hours across the 180 production runs (about 21 CPU-days when serialized).
 
 **Code Availability:**
 All implementation code will be made publicly available on GitHub for reproducibility
 
 ---
 
-## 7. Expected Results and Contributions
+## 7. Results and Contributions
 
 ### 7.1 Quantitative Predictions
 
-**Based on literature analysis:**
+**Measured in the completed 180-run corpus:**
 
-| Approach | Expected Accuracy (4 layers) | Expected Accuracy (8 layers) | Gradient Behavior |
+| Approach | Accuracy (4 layers) | Accuracy (8 layers) | Gradient Behavior |
 |----------|------------------------------|------------------------------|-------------------|
-| Baseline | 85-90% | <80% or failure | Exponential decay |
-| Layerwise | 93-95% | 90-93% | Maintained variance |
-| Local Cost | 88-92% | 85-90% | Polynomial scaling |
+| Baseline | 86.1 ± 3.3% | 87.2 ± 2.2% | Global-cost diagnostic |
+| Layerwise | 86.4 ± 3.0% | 86.7 ± 2.9% | Diagnostic generally decreases |
+| Local Cost | 86.1 ± 2.7% | 87.3 ± 2.1% | 1.5–2.4× lower diagnostic variance |
 
 ### 7.2 Research Contributions
 
@@ -459,7 +470,7 @@ All implementation code will be made publicly available on GitHub for reproducib
 
 ## 13. Conclusion
 
-This research addresses a critical empirical gap in quantum machine learning by providing the first systematic comparison of two prominent barren plateau mitigation strategies—layerwise training and local cost functions—on a standardized benchmark. Through rigorous experimental design, comprehensive metrics, and transparent reporting, this study will deliver actionable insights for quantum machine learning practitioners and establish a foundation for future comparative research in quantum algorithm development.
+This research addresses a critical empirical gap in quantum machine learning by providing a controlled comparison of layerwise training and local cost functions on a standardized benchmark. The completed study shows that accuracy does not separate the approaches at this scale, while gradient variance provides the clearest mitigation signal.
 
 The evidence-based approach prioritizes reproducibility, practical relevance, and scientific rigor, ensuring that findings will meaningfully advance the field's understanding of how to design trainable quantum neural networks for near-term quantum hardware.
 
@@ -480,5 +491,5 @@ The evidence-based approach prioritizes reproducibility, practical relevance, an
 ---
 
 **Document Prepared:** November 3, 2025  
-**Version:** 1.0 - Final Research Plan  
-**Status:** Ready for Implementation
+**Version:** 1.1 - Updated with completed experiment results
+**Status:** Completed; see the current README and results report

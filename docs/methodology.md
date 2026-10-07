@@ -141,20 +141,19 @@ $$C_{\text{global}}(\theta) = \langle \psi(\theta) | \hat{O}_{\text{global}} | \
 where $\hat{O}_{\text{global}}$ measures the entire quantum state.
 
 **Local Cost:**
-$$C_{\text{local}}(\theta) = \sum_{i=1}^{n} \langle \psi(\theta) | \hat{O}_i | \psi(\theta) \rangle$$
+$$C_{\text{local}}(\theta) = \frac{1}{n}\sum_{i=1}^{n} \langle \psi(\theta) | Z_i | \psi(\theta) \rangle$$
 
 where $\hat{O}_i = Z_i$ measures qubit $i$ individually.
 
 ### Implementation
 ```python
-# Global cost (default) — single Pauli-Z on first qubit
+# Global cost (default) — product Pauli-Z over all qubits
 model = QuantumNeuralNetwork(n_qubits=8, local_cost=False)
-readout_ops = [cirq.Z(q0)]
+readout_ops = cirq.Z(q0) * cirq.Z(q1) * cirq.Z(q2) * cirq.Z(q3) * cirq.Z(q4) * cirq.Z(q5) * cirq.Z(q6) * cirq.Z(q7)
 
 # Local cost — independent Pauli-Z on each qubit
 model = QuantumNeuralNetwork(n_qubits=8, local_cost=True)
-readout_ops = [cirq.Z(q0), cirq.Z(q1), cirq.Z(q2), cirq.Z(q3),
-               cirq.Z(q4), cirq.Z(q5), cirq.Z(q6), cirq.Z(q7)]
+readout_ops = sum(cirq.Z(q) for q in qubits) / 8
 ```
 
 ### Theoretical Justification

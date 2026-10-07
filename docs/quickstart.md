@@ -9,8 +9,8 @@ Get up and running with Hybrid-QNN experiments quickly.
 Ensure you have the environment set up:
 ```bash
 # Activate virtual environment
-source venv/bin/activate  # Linux/Mac
-.\venv\Scripts\activate   # Windows
+source .venv/bin/activate  # Linux/Mac
+.venv\Scripts\activate     # Windows
 
 # Install dependencies
 pip install -r requirements.txt
@@ -86,12 +86,14 @@ python scripts/run_4layer_experiments.py --dry-run
 
 ### Validate all results
 ```bash
-python scripts/validate_results.py results/ -v
+python3 scripts/validate_results.py results/baseline -v
+python3 scripts/validate_results.py results/layerwise -v
+python3 scripts/validate_results.py results/local_cost -v
 ```
 
 ### Check output format consistency
 ```bash
-python scripts/check_output_format.py results/
+python3 scripts/check_output_format.py results
 ```
 
 ### Analyze seed variance

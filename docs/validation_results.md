@@ -3,7 +3,7 @@
 This document summarizes configuration validation and the integrity checks performed
 before/throughout the production experiment suite. It is split into:
 
-1. **Historical pre-validation** (single-seed, Jan 2026) — the original Go/No-Go sanity check
+1. **Historical pre-validation** (single-seed) — retained only as context for the pipeline migration
 2. **Current pipeline smoke checks** (8-qubit pipeline)
 3. **Production integrity validation** (all 180 runs)
 
@@ -24,7 +24,7 @@ Run during the pre-experimentation phase (single seed per config) on the origina
 
 ### Go/No-Go Decision
 
-### ✅ GO for Production Experiments
+### Historical decision: ✅ GO for production experiments
 
 1. All 9 configurations execute without errors
 2. Results save to correct directories
@@ -57,7 +57,8 @@ These confirm the 8-qubit PCA pipeline trains, tracks metrics, and writes
 
 ## 3. Production Integrity Validation (180 Runs)
 
-All 180 production runs (3 approaches × 3 depths × 20 seed triples) were validated:
+The canonical 180 production runs (3 approaches × 3 depths × 20 seed triples)
+under `results/{baseline,layerwise,local_cost}/depth_{4,6,8}` were validated:
 
 - **Completeness**: every `seed_{0..19}/metrics.json` present for every approach × depth
 - **Schema**: all files match the [Metrics Schema](metrics_schema.md) (`total_updates=2500`,
@@ -66,11 +67,17 @@ All 180 production runs (3 approaches × 3 depths × 20 seed triples) were valid
 - **Reproducibility markers**: `data_seed`, `init_seed`, `training_seed` follow the
   base-42 3-step ladder per `seed_index`
 
-Printables:
+The legacy files under `results/archive/` are retained for historical comparison
+and use an older schema; they are not part of the 180-run production corpus and
+should be excluded when running strict validation against the current results.
+
+Validation commands:
 
 ```bash
-python scripts/validate_results.py results/ -v
-python scripts/check_output_format.py results/
+python3 scripts/validate_results.py results/baseline -v
+python3 scripts/validate_results.py results/layerwise -v
+python3 scripts/validate_results.py results/local_cost -v
+python3 scripts/check_output_format.py results
 ```
 
 ### Production Results vs Historical Validation
