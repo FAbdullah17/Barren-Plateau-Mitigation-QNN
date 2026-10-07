@@ -1,23 +1,20 @@
-# Validation Results — Pre-Experimentation Testing
+# Validation Results
 
-This document summarizes the results of all 9 configuration tests performed during the pre-experimentation validation phase (single seed per config).
+This document summarizes configuration validation and the integrity checks performed
+before/throughout the production experiment suite. It is split into:
 
----
-
-## Test Environment
-
-- **Date:** January 8, 2026
-- **System:** Intel i5-10th Gen, 16GB RAM, CPU-only (no GPU)
-- **TensorFlow:** 2.15.0
-- **TensorFlow Quantum:** 0.7.2
-- **Cirq:** 1.3.0
-- **Seed:** 42 (for all validation runs)
+1. **Historical pre-validation** (single-seed) — retained only as context for the pipeline migration
+2. **Current pipeline smoke checks** (8-qubit pipeline)
+3. **Production integrity validation** (all 180 runs)
 
 ---
 
-## Validation Results Summary (Seed 42 Only)
+## 1. Historical Pre-Validation (Seed 42 Only) — Go/No-Go
 
-### Accuracy by Depth and Approach
+Run during the pre-experimentation phase (single seed per config) on the original
+4-qubit pipeline.
+
+### Results Summary (Seed 42 Only)
 
 | Approach | 4-Layer | 6-Layer | 8-Layer |
 |----------|---------|---------|---------|
@@ -25,74 +22,80 @@ This document summarizes the results of all 9 configuration tests performed duri
 | **Layerwise** | 78.00% | 77.00% | 78.00% |
 | **Local Cost** | 79.50% | 79.50% | 78.00% |
 
-### Training Time (seconds)
+### Go/No-Go Decision
 
-| Approach | 4-Layer | 6-Layer | 8-Layer |
-|----------|---------|---------|---------|
-| **Baseline** | 638 | 1878 | 2303 |
-| **Layerwise** | 391 | 1742 | 3054 |
-| **Local Cost** | 1165 | 1629 | 3493 |
+### Historical decision: ✅ GO for production experiments
 
-### Gradient Statistics
-
-| Config | Mean Gradient Norm | Barren Plateau |
-|--------|-------------------|----------------|
-| Baseline 4L | 0.279 | No |
-| Baseline 6L | 0.276 | No |
-| Baseline 8L | 0.224 | No |
-| Layerwise 4L | 0.228 | No |
-| Layerwise 6L | 0.235 | No |
-| Layerwise 8L | 0.226 | No |
-| Local Cost 4L | 0.182 | No |
-| Local Cost 6L | 0.181 | No |
-| Local Cost 8L | 0.175 | No |
-
----
-
-## Key Findings from Validation
-
-### 1. All Configurations Execute Successfully
-All 9 configurations completed training without errors and achieved reasonable accuracy (76-80%).
-
-### 2. Layerwise & Local Cost Outperform Baseline (Single Seed)
-- At 4 layers: Local Cost (79.5%) > Layerwise (78%) > Baseline (76.5%)
-- At 6 layers: Local Cost (79.5%) > Layerwise (77%) > Baseline (76%)
-- At 8 layers: Layerwise = Local Cost (78%) > Baseline (76.5%)
-
-### 3. No Barren Plateau Detected in Validation
-With a single seed (42), gradient norms remained healthy (>0.1). This was expected — the barren plateau effect manifests more clearly across multiple seeds where some initializations fall into flat regions.
-
-> **Important:** Production runs with 5 seeds revealed that **8-layer baseline drops to ~53% mean accuracy**, with all 5 seeds failing to exceed 55%. The single-seed validation did not capture this because seed 42 happened to find a relatively favorable initialization. This underscores the importance of multi-seed experiments for studying stochastic phenomena like barren plateaus.
-
----
-
-## Go/No-Go Decision
-
-### ✅ GO for Production Experiments
-
-**Reasons:**
 1. All 9 configurations execute without errors
 2. Results save to correct directories
 3. Metrics schema is consistent
 4. Automation scripts work correctly
 
+> **Note:** An early 5-seed run on the old 4-qubit pipeline showed an 8-layer
+> baseline collapse to ~53%. With the current 8-qubit PCA pipeline this is **not
+> reproduced** — the baseline reaches ~87% at 8 layers across all 20 seed triples
+> (see production results below). That early observation underscores the value of
+> the multi-seed, pipeline-controlled suite that eventually replaced it.
+
 ---
 
-## Production Results vs Validation
+## 2. Current Pipeline Smoke Checks
 
-The following table compares single-seed validation results with full 5-seed production results:
+Each config also runs a fast smoke test (`*_test.yaml`, 40 updates, 8 qubits) to
+verify the end-to-end path on the current pipeline:
 
-| Config | Validation (seed 42) | Production (5-seed mean) | Notes |
-|--------|---------------------|--------------------------|-------|
-| Baseline 4L | 76.0% | 73.8% | Consistent |
-| Baseline 6L | 76.0% | 73.9% | Consistent |
-| Baseline 8L | 76.5% | **52.7%** | ⚠️ Barren plateau across seeds |
-| Layerwise 4L | 78.0% | 74.0% | Consistent |
-| Layerwise 6L | 77.0% | 74.2% | Consistent |
-| Layerwise 8L | 78.0% | 73.9% | Consistent |
-| Local Cost 4L | 79.5% | 75.3% | Consistent |
-| Local Cost 6L | 79.5% | 75.6% | Consistent |
-| Local Cost 8L | 78.0% | 75.4% | Consistent |
+| Approach | Updates | Test Acc (seed 0) | Grad-Var |
+|----------|---------|-------------------|----------|
+| Baseline | 40 | 0.760 | 0.01844 |
+| Layerwise | 40 | 0.700 | 0.02010 |
+| Local Cost | 40 | 0.580 | 0.00142 |
+
+These confirm the 8-qubit PCA pipeline trains, tracks metrics, and writes
+`metrics.json` + `training_history.png` correctly.
+
+---
+
+## 3. Production Integrity Validation (180 Runs)
+
+The canonical 180 production runs (3 approaches × 3 depths × 20 seed triples)
+under `results/{baseline,layerwise,local_cost}/depth_{4,6,8}` were validated:
+
+- **Completeness**: every `seed_{0..19}/metrics.json` present for every approach × depth
+- **Schema**: all files match the [Metrics Schema](metrics_schema.md) (`total_updates=2500`,
+  `n_parameters` = 64/96/128 by depth, `training_diagnostic` + `history` present)
+- **Layout**: one canonical `metrics.json` + `training_history.png` per seed
+- **Reproducibility markers**: `data_seed`, `init_seed`, `training_seed` follow the
+  base-42 3-step ladder per `seed_index`
+
+The legacy files under `results/archive/` are retained for historical comparison
+and use an older schema; they are not part of the 180-run production corpus and
+should be excluded when running strict validation against the current results.
+
+Validation commands:
+
+```bash
+python3 scripts/validate_results.py results/baseline -v
+python3 scripts/validate_results.py results/layerwise -v
+python3 scripts/validate_results.py results/local_cost -v
+python3 scripts/check_output_format.py results
+```
+
+### Production Results vs Historical Validation
+
+| Config | Validation (old seed 42) | Production (20-triple mean) | Notes |
+|--------|--------------------------|-----------------------------|-------|
+| Baseline 4L | 76.0% | 86.1% ± 3.3% | Pipeline change (PCA/8 qubits) |
+| Baseline 6L | 76.0% | 87.2% ± 1.8% | " |
+| Baseline 8L | 76.5% | 87.2% ± 2.2% | No collapse in current pipeline |
+| Layerwise 4L | 78.0% | 86.4% ± 3.0% | " |
+| Layerwise 6L | 77.0% | 86.7% ± 2.4% | " |
+| Layerwise 8L | 78.0% | 86.7% ± 2.9% | " |
+| Local Cost 4L | 79.5% | 86.1% ± 2.7% | " |
+| Local Cost 6L | 79.5% | 87.1% ± 2.2% | " |
+| Local Cost 8L | 78.0% | 87.3% ± 2.1% | " |
+
+The 8-point accuracy shift between historical validation and production is explained
+by the pipeline upgrade (PCA feature reduction on 8 qubits), not by the seeding scheme.
 
 ---
 
@@ -100,24 +103,13 @@ The following table compares single-seed validation results with full 5-seed pro
 
 ```
 results/
-├── baseline/
-│   ├── depth_4/seed_42/  ✓
-│   ├── depth_6/seed_42/  ✓
-│   └── depth_8/seed_42/  ✓
-├── layerwise/
-│   ├── depth_4/seed_42/  ✓
-│   ├── depth_6/seed_42/  ✓
-│   └── depth_8/seed_42/  ✓
-└── local_cost/
-    ├── depth_4/seed_42/  ✓
-    ├── depth_6/seed_42/  ✓
-    └── depth_8/seed_42/  ✓
+├── baseline/ depth_{4,6,8}/ seed_{0..19}/    (metrics.json, training_history.png)
+├── layerwise/ depth_{4,6,8}/ seed_{0..19}/   (metrics.json, training_history.png)
+└── local_cost/ depth_{4,6,8}/ seed_{0..19}/  (metrics.json, training_history.png)
 ```
 
 ---
 
-**Validated by:** Pre-experimentation testing
-**Date:** January 8, 2026
-**Status:** COMPLETE — Production experiments finished
+**Status:** COMPLETE — 180 production experiments finished and validated.
 
-**Last Updated:** February 2026
+**Last Updated:** October 2026

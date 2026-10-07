@@ -1,5 +1,14 @@
 # Research Problem Statement and Methodology
 
+> **Current-state note (October 2026).** This document began as a pre-experiment
+> proposal. The shipped implementation uses an 8-qubit PCA pipeline and the
+> completed corpus contains 180 runs (three approaches, depths 4/6/8, and 20
+> seed triples per condition). The results supersede the predictions below:
+> accuracy remains approximately 86–87% at all depths, while local cost produces
+> 1.5–2.4× lower training-diagnostic gradient variance than baseline. Read
+> [README](README.md), [Results Report](docs/results_report.md), and
+> [Methodology](docs/methodology.md) for the authoritative current description.
+
 ## Title
 **Empirical Comparison of Layerwise Training and Local Cost Functions for Mitigating Barren Plateaus in Quantum Neural Networks**
 
@@ -37,8 +46,8 @@ Two promising approaches have emerged from theoretical and limited empirical stu
 
 **Layerwise Training (Skolik et al., 2020):**
 - Train quantum circuits incrementally, one layer at a time
-- Initialize structural stages sequentially before adding depth
-- **Evidence:** Single empirical study on MNIST (digits 3 vs 6) showing 8% lower generalization error and 40% higher success rate
+- Freeze previously trained layers before adding new ones
+- **Evidence:** Prior literature reports improved trainability for layerwise methods; those percentages are literature context, not measurements from this repository.
 - **Limitation:** No independent replications; tested only on MNIST; unclear generalization to other datasets or tasks
 
 **Local Cost Functions (Cerezo et al., 2021):**
@@ -113,12 +122,14 @@ Despite strong theoretical foundations and preliminary empirical evidence for bo
 **Data Specifications:**
 - Training samples: 1,000 (500 per class)
 - Test samples: 200 (100 per class)
-- Preprocessing: Extract 4 features from 28x28 images using principal component interpolation
+- Preprocessing: Downsample 28×28 images to 4×4 using bilinear interpolation
 - Normalization: Scale pixel values to [0, 1]
-- Encoding: Flatten to extract the 4-dimensional principal feature vector for quantum encoding
+- Encoding: PCA-reduce the 16 downsampled features to 8 components for quantum encoding
 
 **Downsampling Rationale:**
-4-feature inputs map naturally to 4-qubit quantum circuits (standard practice in QML), balancing computational feasibility with task complexity.
+The 4×4 reduction provides a fixed 16-dimensional classical representation; PCA
+then supplies exactly 8 features to the 8-qubit circuit while keeping the
+pipeline computationally tractable.
 
 ---
 
@@ -127,21 +138,21 @@ Despite strong theoretical foundations and preliminary empirical evidence for bo
 **Hardware-Efficient Ansatz**
 
 **Circuit Specifications:**
-- **Qubits:** 4
+- **Qubits:** 8
 - **Layers tested:** 4, 6, 8 (to evaluate scalability)
 - **Parameterized gates per layer:**
   - RY(θ) rotation on each qubit
   - RZ(φ) rotation on each qubit
   - CNOT gates connecting adjacent qubits (linear topology)
-- **Total parameters per layer:** 8 (2 rotations × 4 qubits)
-- **Total parameters (4-layer circuit):** 32
+- **Total parameters per layer:** 16 (2 rotations × 8 qubits)
+- **Total parameters:** 64 / 96 / 128 for depths 4 / 6 / 8
 
 **Data Encoding:**
-- Amplitude encoding via RY rotations in the initial layer
-- Each qubit encodes 4 pixel values through rotation angles
+- Angle encoding via one RY rotation per qubit
+- PCA supplies one feature per qubit; angles are `π × feature`
 
 **Measurement:**
-- Binary classification output derived from expectation value of Pauli-Z on designated output qubit(s)
+- Binary classification output uses the fixed transformed readout of the global product-Z or local averaged-Z expectation.
 
 **Justification:**
 Hardware-efficient ansatz is widely adopted in QML literature and aligns with NISQ device capabilities.
@@ -157,8 +168,8 @@ Hardware-efficient ansatz is widely adopted in QML literature and aligns with NI
 | Optimizer | Adam | Universal standard in QML literature |
 | Learning rate | 0.01 | Validated in recent studies (Zhuang & Guan, 2025) |
 | Batch size | 20 | Standard for quantum ML experiments |
-| Training epochs | 50 | Sufficient for convergence assessment |
-| Shots (simulator) | 1024 | Standard for gradient estimation |
+| Total gradient updates | 2500 | Matching between approaches and depths |
+| Simulation | Deterministic state-vector (no shots) | Reproducible gradient statistics |
 | Initialization | Uniform random [-π, π] | Baseline approach |
 | Loss function | Binary cross-entropy | Standard for classification |
 
@@ -170,36 +181,36 @@ Hardware-efficient ansatz is widely adopted in QML literature and aligns with NI
 
 **Configuration:**
 - Training method: Standard gradient descent on full circuit
-- Cost function: Global (single expectation value on output qubit)
+- Cost function: Global product-Z readout over all qubits
 - Circuit depth: 4, 6, 8 layers
 
 **Purpose:** Establish baseline gradient behavior and performance; demonstrate barren plateau severity
 
-**Expected Outcome:** Observable gradient vanishing for 6+ layers; reduced accuracy or training failure for 8 layers
+**Observed outcome:** No accuracy collapse through 8 layers on the current 8-qubit PCA pipeline.
 
 ---
 
 #### **Approach 2: Layerwise Training**
 
 **Configuration:**
-- Training method: Incremental depth-staged curriculum training
+- Training method: Incremental layer-by-layer training with parameter freezing
 - Cost function: Global
 - Circuit depth: Build progressively from 1 to 4, 6, or 8 layers
 
-**Implementation Protocol (following Skolik et al., 2020):**
+**Implementation Protocol (following Skolik et al., 2020, step-budget variant):**
 
-1. **Initialization:** Train single-layer circuit for 10 epochs
+1. **Initialization:** Train a 1-layer circuit for `per_stage` gradient updates
 2. **Layer Addition:** Add one new layer (initialized randomly)
-3. **Selective Training:** Train only the new layer's parameters for 10 epochs while evaluating previous layers structurally
+3. **Selective Training:** Train only the new layer's parameters for `per_stage` updates while keeping previous layers frozen
 4. **Iteration:** Repeat steps 2-3 until target depth reached
-5. **Fine-tuning (optional):** Evaluate intermediate architecture and train for 10 structural epochs
+5. **Fine-tuning:** Unfreeze all parameters and train for `finetune` updates
 
 **Hyperparameters:**
-- Epochs per layer: 10
-- Curriculum strategy: Staged (evaluate after each structural phase)
-- Total training epochs: 10 × (number of layers) + 10 (fine-tuning)
+- Budget per stage / fine-tune (sum = 2500): 500/500 (4L), 357/358 (6L), 277/284 (8L)
+- Freezing strategy: Immediate (freeze after each layer's training phase)
+- Total gradient updates: `per_stage × n_layers + finetune = 2500` (matched to baseline)
 
-**Expected Outcome:** Maintained gradient variance across depths; 8% improvement in test accuracy; higher training success rate
+**Observed outcome:** Layerwise training has a distinct decreasing gradient-variance trajectory, but no accuracy advantage over the baseline.
 
 ---
 
@@ -219,12 +230,12 @@ C_global = ⟨ψ|O_global|ψ⟩
 C_local = (1/n) Σᵢ ⟨ψ|Oᵢ|ψ⟩
 
 where:
-- n = number of qubits (4)
+- n = number of qubits (8)
 - Oᵢ = observable measuring only qubit i (e.g., Pauli-Z on qubit i)
 - Summation averages over independent measurements of each qubit
 
 **Implementation:**
-- Measure expectation value of Pauli-Z on each of 4 qubits independently
+- Measure the average expectation value of Pauli-Z on all 8 qubits independently
 - Compute per-qubit cost as squared difference from target
 - Average costs across all qubits
 - Backpropagate averaged cost
@@ -232,7 +243,7 @@ where:
 **Theoretical Justification:**
 Cerezo et al. (2021) prove that local cost functions maintain polynomial gradient variance scaling: Var[∇θC] ∝ poly(n) instead of exp(-n)
 
-**Expected Outcome:** Trainability preserved at larger depths (8 layers); better gradient scaling than baseline; potentially lower accuracy than layerwise but better than baseline
+**Observed outcome:** Local cost preserves accuracy and lowers final training-diagnostic gradient variance by 1.5–2.4× versus baseline at all depths.
 
 ---
 
@@ -244,7 +255,7 @@ Cerezo et al. (2021) prove that local cost functions maintain polynomial gradien
    - Formula: Var[∇θC] = E[(∇θC)²] - (E[∇θC])²
    - Measured across all trainable parameters
    - Tracked every epoch
-   - **Barren plateau indicator:** Variance < 10⁻⁶
+   - The current implementation reports the continuous statistic `mean_param_grad_variance`; it does not emit a binary threshold-based barren-plateau decision.
 
 2. **Gradient Norm**
    - Formula: ||∇θC||₂ = sqrt(Σᵢ(∂C/∂θᵢ)²)
@@ -268,7 +279,7 @@ Cerezo et al. (2021) prove that local cost functions maintain polynomial gradien
    - Circuit evaluation count
 
 6. **Success Rate**
-   - Percentage of runs (across 5 random seeds) achieving >90% test accuracy
+   - Percentage of runs (across 20 seed triples) achieving ≥70% test accuracy (stricter ≥85% also reported)
    - Robustness indicator
 
 ---
@@ -279,8 +290,8 @@ Cerezo et al. (2021) prove that local cost functions maintain polynomial gradien
 - Dataset and preprocessing
 - Quantum circuit architecture (gates, topology)
 - Optimizer and learning rate
-- Batch size and number of epochs
-- Random seed initialization (5 different seeds per configuration)
+- Batch size and total gradient updates
+- Random seed triples (20 per configuration, derived from base seed 42: indices 0-19)
 
 **Independent Variables:**
 - Training approach (Baseline, Layerwise, Local Cost)
@@ -293,7 +304,7 @@ Cerezo et al. (2021) prove that local cost functions maintain polynomial gradien
 - Training time
 
 **Total Experimental Configurations:**
-3 approaches × 3 depths × 5 seeds = **45 training runs**
+3 approaches × 3 depths × 20 seed triples = **180 training runs**
 
 ---
 
@@ -308,24 +319,24 @@ Cerezo et al. (2021) prove that local cost functions maintain polynomial gradien
 **Computational Resources:**
 - CPU-based quantum simulators (4-8 qubits feasible)
 - Standard laptop/workstation (no GPU required for this scale)
-- Estimated compute time: ~1-2 weeks for all experiments
+- Completed run inventory: approximately 506 summed CPU-hours across the 180 production runs (about 21 CPU-days when serialized).
 
 **Code Availability:**
 All implementation code will be made publicly available on GitHub for reproducibility
 
 ---
 
-## 7. Expected Results and Contributions
+## 7. Results and Contributions
 
 ### 7.1 Quantitative Predictions
 
-**Based on literature analysis:**
+**Measured in the completed 180-run corpus:**
 
-| Approach | Expected Accuracy (4 layers) | Expected Accuracy (8 layers) | Gradient Behavior |
+| Approach | Accuracy (4 layers) | Accuracy (8 layers) | Gradient Behavior |
 |----------|------------------------------|------------------------------|-------------------|
-| Baseline | 85-90% | <80% or failure | Exponential decay |
-| Layerwise | 93-95% | 90-93% | Maintained variance |
-| Local Cost | 88-92% | 85-90% | Polynomial scaling |
+| Baseline | 86.1 ± 3.3% | 87.2 ± 2.2% | Global-cost diagnostic |
+| Layerwise | 86.4 ± 3.0% | 86.7 ± 2.9% | Diagnostic generally decreases |
+| Local Cost | 86.1 ± 2.7% | 87.3 ± 2.1% | 1.5–2.4× lower diagnostic variance |
 
 ### 7.2 Research Contributions
 
@@ -357,7 +368,7 @@ All implementation code will be made publicly available on GitHub for reproducib
 
 ### 8.1 Scientific Impact
 
-- **Strengthens empirical foundations** by demonstrating practical application
+- **Closes empirical gap** between theoretical mitigation strategies and practical application
 - **Validates or refutes** two prominent approaches through rigorous comparison
 - **Establishes benchmark** for future barren plateau mitigation research
 
@@ -382,7 +393,7 @@ All implementation code will be made publicly available on GitHub for reproducib
 | **Phase 1: Setup & Baseline** | Weeks 1-4 | Working MNIST QNN baseline with documented barren plateau |
 | **Phase 2: Layerwise Implementation** | Weeks 5-8 | Validated layerwise training with gradient tracking |
 | **Phase 3: Local Cost Implementation** | Weeks 9-12 | Local cost function adaptation to MNIST classification |
-| **Phase 4: Comparative Experiments** | Weeks 13-17 | All 45 experimental runs completed |
+| **Phase 4: Comparative Experiments** | Weeks 13-17 | All 180 experimental runs completed |
 | **Phase 5: Analysis** | Weeks 18-19 | Statistical analysis, visualization, tables |
 | **Phase 6: Manuscript Preparation** | Weeks 20-23 | Complete draft ready for submission |
 | **Phase 7: Revision & Submission** | Weeks 24-26 | Final manuscript submitted to conference/journal |
@@ -459,7 +470,7 @@ All implementation code will be made publicly available on GitHub for reproducib
 
 ## 13. Conclusion
 
-This research addresses a critical empirical gap in quantum machine learning by providing the first systematic comparison of two prominent barren plateau mitigation strategies—layerwise training and local cost functions—on a standardized benchmark. Through rigorous experimental design, comprehensive metrics, and transparent reporting, this study will deliver actionable insights for quantum machine learning practitioners and establish a foundation for future comparative research in quantum algorithm development.
+This research addresses a critical empirical gap in quantum machine learning by providing a controlled comparison of layerwise training and local cost functions on a standardized benchmark. The completed study shows that accuracy does not separate the approaches at this scale, while gradient variance provides the clearest mitigation signal.
 
 The evidence-based approach prioritizes reproducibility, practical relevance, and scientific rigor, ensuring that findings will meaningfully advance the field's understanding of how to design trainable quantum neural networks for near-term quantum hardware.
 
@@ -480,5 +491,5 @@ The evidence-based approach prioritizes reproducibility, practical relevance, an
 ---
 
 **Document Prepared:** November 3, 2025  
-**Version:** 1.0 - Final Research Plan  
-**Status:** Ready for Implementation
+**Version:** 1.1 - Updated with completed experiment results
+**Status:** Completed; see the current README and results report

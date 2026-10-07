@@ -9,4 +9,11 @@ venv/
 .venv/
 env/
 .vscode/
-Barren_Plateau_Mitigation_Paper.docx
+opencode.json
+docs/AUDIT_FINDINGS.md
+docs/IMPLEMENTATION_PLAN.md
+logs/
+results/archive/
+/.python-version
+results/_quarantine/
+results/local_cost/_quarantine_stray_seed6/

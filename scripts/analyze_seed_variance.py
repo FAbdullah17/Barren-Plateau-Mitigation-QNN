@@ -1,180 +1,180 @@
 #!/usr/bin/env python
 """
-Analyze variance across different random seeds.
+Analyze variance across different seed triples.
+
+Summarizes per-seed test accuracy, test loss, training time, and the gradient
+diagnostic ``mean_param_grad_variance`` across the ``seed_<N>`` results.
 
 Usage:
-    python scripts/analyze_seed_variance.py results/baseline/depth_4/
-    python scripts/analyze_seed_variance.py results/ --approach baseline --depth 4
+    python scripts/analyze_seed_variance.py results/baseline/depth_8/
+    python scripts/analyze_seed_variance.py results/baseline/depth_8/ --json
 """
 
 import json
 import argparse
-from pathlib import Path
 import sys
+from pathlib import Path
 
-def load_metrics(result_dir: Path) -> dict:
-    """Load metrics from a result directory."""
-    metrics_path = result_dir / 'metrics.json'
+import numpy as np
+
+
+# Fields required from each metrics.json for this analysis.
+REQUIRED_FIELDS = [
+    'seed_index', 'test_acc', 'test_loss', 'training_time_seconds',
+    'n_parameters', 'training_diagnostic',
+]
+
+
+def load_metrics(result_dir: Path):
+    """Load metrics.json from a result directory, or None if absent."""
+    metrics_path = Path(result_dir) / 'metrics.json'
     if not metrics_path.exists():
         return None
     with open(metrics_path) as f:
         return json.load(f)
 
 
-def analyze_variance(result_dirs: list) -> dict:
-    """Analyze variance across seed results."""
-    metrics_list = []
-    
-    for dir_path in result_dirs:
-        metrics = load_metrics(Path(dir_path))
-        if metrics:
-            metrics_list.append(metrics)
-    
+def analyze_variance(metrics_list: list) -> dict:
+    """Per-metric mean/std/min/max statistics across seeds."""
     if not metrics_list:
         return None
-    
-    # Extract key metrics
-    accuracies = []
-    train_accs = []
-    grad_norms = []
-    training_times = []
-    
-    for m in metrics_list:
-        acc = m.get('test_acc', m.get('final_val_acc', 0))
-        accuracies.append(acc)
-        
-        train_acc = m.get('train_acc', m.get('final_train_acc', 0))
-        train_accs.append(train_acc)
-        
-        gs = m.get('gradient_stats', {})
-        grad_norms.append(gs.get('mean_norm', 0))
-        
-        training_times.append(m.get('training_time', 0))
-    
-    # Calculate statistics
-    import numpy as np
-    
-    return {
-        'n_seeds': len(metrics_list),
-        'test_accuracy': {
-            'mean': float(np.mean(accuracies)),
-            'std': float(np.std(accuracies)),
-            'min': float(np.min(accuracies)),
-            'max': float(np.max(accuracies)),
-            'values': [float(x) for x in accuracies]
-        },
-        'train_accuracy': {
-            'mean': float(np.mean(train_accs)),
-            'std': float(np.std(train_accs)),
-        },
-        'gradient_norm': {
-            'mean': float(np.mean(grad_norms)),
-            'std': float(np.std(grad_norms)),
-        },
-        'training_time': {
-            'mean': float(np.mean(training_times)),
-            'std': float(np.std(training_times)),
-            'total': float(np.sum(training_times)),
+
+    def _series(key, transform=None):
+        if transform is None:
+            transform = (lambda m: m[key])
+        return np.asarray([transform(m) for m in metrics_list], dtype=float)
+
+    test_acc = _series('test_acc')
+    test_loss = _series('test_loss')
+    train_time = _series('training_time_seconds')
+    param_grad_var = _series(
+        'training_diagnostic',
+        lambda m: m['training_diagnostic']['mean_param_grad_variance'],
+    )
+
+    def _summary(values):
+        return {
+            'mean': float(values.mean()),
+            'std': float(values.std(ddof=1)) if len(values) > 1 else 0.0,
+            'min': float(values.min()),
+            'max': float(values.max()),
+            'values': [float(v) for v in values],
         }
+
+    # Bootstrap 95% CI of the mean test accuracy (Monte-Carlo, seed=0).
+    rng = np.random.default_rng(0)
+    boot_idx = rng.integers(0, len(test_acc), size=(2000, len(test_acc)))
+    ci = [float(np.percentile(test_acc[boot_idx].mean(axis=1), q)) for q in (2.5, 97.5)]
+
+    stats = {
+        'n_seeds': len(metrics_list),
+        'test_accuracy': _summary(test_acc),
+        'test_accuracy_ci_95': ci,
+        'test_loss': _summary(test_loss),
+        'training_time_seconds': _summary(train_time),
+        'mean_param_grad_variance': _summary(param_grad_var),
+        'n_parameters': int(metrics_list[0]['n_parameters']),
     }
+    return stats
 
 
 def find_seed_dirs(base_dir: Path) -> list:
-    """Find all seed directories under a base directory."""
+    """Find all seed result directories under a base directory."""
     base_dir = Path(base_dir)
     seed_dirs = []
-    
-    # Check for seed_* subdirectories
+
     for item in base_dir.iterdir():
         if item.is_dir() and item.name.startswith('seed_'):
             if (item / 'metrics.json').exists():
                 seed_dirs.append(item)
-    
-    # If no seed dirs found, check if base_dir itself has metrics
+
     if not seed_dirs and (base_dir / 'metrics.json').exists():
         seed_dirs.append(base_dir)
-    
+
     return sorted(seed_dirs)
 
 
 def main():
-    parser = argparse.ArgumentParser(description='Analyze variance across random seeds')
-    parser.add_argument('path', type=str, help='Path to results directory containing seed subdirs')
+    parser = argparse.ArgumentParser(
+        description='Analyze variance across seed triples'
+    )
+    parser.add_argument(
+        'path', type=str,
+        help='Path to results directory containing seed_<N> subdirectories',
+    )
     parser.add_argument('--json', action='store_true', help='Output as JSON')
     args = parser.parse_args()
-    
+
     result_path = Path(args.path)
     if not result_path.exists():
         print(f"ERROR: Path not found: {args.path}")
         sys.exit(1)
-    
-    # Find seed directories
+
     seed_dirs = find_seed_dirs(result_path)
-    
+
     if not seed_dirs:
         print(f"No seed results found in: {args.path}")
         sys.exit(1)
-    
+
+    metrics_list = []
+    for seed_dir in seed_dirs:
+        metrics = load_metrics(seed_dir)
+        if metrics is None:
+            print(f"WARNING: no metrics.json in {seed_dir}; skipped")
+            continue
+        missing = [k for k in REQUIRED_FIELDS if k not in metrics]
+        if missing:
+            print(
+                f"ERROR: {seed_dir / 'metrics.json'} missing required fields: "
+                f"{missing}"
+            )
+            sys.exit(1)
+        metrics_list.append(metrics)
+
+    if not metrics_list:
+        print(f"No valid metrics.json files found in: {args.path}")
+        sys.exit(1)
+
+    stats = analyze_variance(metrics_list)
+
+    if args.json:
+        print(json.dumps(stats, indent=2))
+        sys.exit(0)
+
     print(f"\n{'='*60}")
     print(f"SEED VARIANCE ANALYSIS")
     print(f"{'='*60}")
     print(f"Path: {args.path}")
-    print(f"Seeds found: {len(seed_dirs)}")
-    for sd in seed_dirs:
-        print(f"  - {sd.name}")
-    
-    # Analyze
-    stats = analyze_variance(seed_dirs)
-    
-    if not stats:
-        print("\nERROR: Could not analyze metrics")
-        sys.exit(1)
-    
-    if args.json:
-        print(json.dumps(stats, indent=2))
-        sys.exit(0)
-    
-    # Print results
-    print(f"\n{'='*60}")
-    print(f"RESULTS ({stats['n_seeds']} seeds)")
-    print(f"{'='*60}")
-    
+    print(f"Seeds analyzed: {stats['n_seeds']}")
+
     acc = stats['test_accuracy']
     print(f"\nTest Accuracy:")
     print(f"  Mean:  {acc['mean']*100:.2f}%")
     print(f"  Std:   {acc['std']*100:.2f}%")
     print(f"  Range: {acc['min']*100:.2f}% - {acc['max']*100:.2f}%")
-    
-    print(f"\nTrain Accuracy:")
-    ta = stats['train_accuracy']
-    print(f"  Mean:  {ta['mean']*100:.2f}%")
-    print(f"  Std:   {ta['std']*100:.2f}%")
-    
-    print(f"\nGradient Norm:")
-    gn = stats['gradient_norm']
-    print(f"  Mean:  {gn['mean']:.6e}")
-    print(f"  Std:   {gn['std']:.6e}")
-    
+    print(f"  95% CI: [{stats['test_accuracy_ci_95'][0]*100:.2f}%, "
+          f"{stats['test_accuracy_ci_95'][1]*100:.2f}%]")
+
+    loss = stats['test_loss']
+    print(f"\nTest Loss:")
+    print(f"  Mean:  {loss['mean']:.4f}")
+    print(f"  Std:   {loss['std']:.4f}")
+
+    tt = stats['training_time_seconds']
     print(f"\nTraining Time:")
-    tt = stats['training_time']
     print(f"  Mean:  {tt['mean']/60:.1f} min")
     print(f"  Std:   {tt['std']/60:.1f} min")
-    print(f"  Total: {tt['total']/60:.1f} min")
-    
-    # Variance check
-    print(f"\n{'='*60}")
-    print(f"VARIANCE CHECK")
+    print(f"  Total: {tt['mean']*stats['n_seeds']/60:.1f} min")
+
+    pgv = stats['mean_param_grad_variance']
+    print(f"\nMean Parameter-Gradient Variance:")
+    print(f"  Mean:  {pgv['mean']:.3e}")
+    print(f"  Std:   {pgv['std']:.3e}")
+
+    print(f"\nParameters: {stats['n_parameters']}")
     print(f"{'='*60}")
-    
-    variance_ok = acc['std'] < 0.05  # Less than 5%
-    if variance_ok:
-        print(f"✓ Accuracy variance {acc['std']*100:.2f}% < 5% threshold")
-    else:
-        print(f"⚠ Accuracy variance {acc['std']*100:.2f}% > 5% threshold")
-    
-    print(f"{'='*60}")
-    
-    sys.exit(0 if variance_ok else 1)
+
+    sys.exit(0)
 
 
 if __name__ == "__main__":
